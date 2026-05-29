@@ -1,0 +1,1 @@
+-- Default game templates are exposed by /api/default-configs to keep runtime config explicit.

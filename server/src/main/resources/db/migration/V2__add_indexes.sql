@@ -1,0 +1,14 @@
+CREATE INDEX idx_game_configs_room ON game_configs(roomId);
+CREATE INDEX idx_players_room ON players(roomId);
+CREATE INDEX idx_players_room_seat ON players(roomId, seatNumber);
+CREATE INDEX idx_rounds_room_round ON rounds(roomId, roundNumber);
+CREATE INDEX idx_actions_room_phase ON game_actions(roomId, roundNumber, phase);
+CREATE INDEX idx_actions_actor ON game_actions(actorPlayerId);
+CREATE INDEX idx_speeches_room_round ON speeches(roomId, roundNumber);
+CREATE INDEX idx_votes_room_round ON votes(roomId, roundNumber);
+CREATE INDEX idx_memory_room_scope ON memory_entries(roomId, scope);
+CREATE INDEX idx_memory_owner ON memory_entries(ownerPlayerId);
+CREATE INDEX idx_events_room_round ON game_events(roomId, roundNumber);
+CREATE INDEX idx_agent_profiles_player ON agent_profiles(playerId);
+CREATE INDEX idx_role_states_player ON role_states(roomId, playerId);
+CREATE INDEX idx_lovers_room ON lover_relations(roomId);

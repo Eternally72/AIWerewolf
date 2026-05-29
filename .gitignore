@@ -1,0 +1,73 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/timing.properties
+
+# Logs
+logs/
+*.log
+
+# Spring Boot local configs
+server/src/main/resources/application-local.yml
+server/src/main/resources/application-secret.yml
+server/src/main/resources/application-prod.yml
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+web/.env.local
+web/.env.development.local
+web/.env.production.local
+
+# Build outputs
+dist/
+build/
+out/
+
+# MySQL / local data
+mysql-data/
+data/
+*.sql.gz
+*.dump
+
+# Docker local overrides
+docker-compose.override.yml
+
+# Secrets / certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+secrets/
+config/secrets/
+
+# Test reports and coverage
+coverage/
+htmlcov/
+surefire-reports/
+
+# Temporary files
+tmp/
+temp/
+.cache/

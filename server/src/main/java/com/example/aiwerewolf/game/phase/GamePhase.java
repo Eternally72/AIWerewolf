@@ -1,0 +1,25 @@
+package com.example.aiwerewolf.game.phase;
+
+public enum GamePhase {
+    WAITING,
+    ROLE_ASSIGNED,
+    FIRST_NIGHT,
+    NIGHT,
+    CUPID_ACTION,
+    GUARD_ACTION,
+    WEREWOLF_ACTION,
+    SEER_ACTION,
+    WITCH_ACTION,
+    OTHER_NIGHT_ACTION,
+    NIGHT_RESOLUTION,
+    DAY_ANNOUNCEMENT,
+    LAST_WORDS,
+    SHERIFF_ELECTION,
+    DAY_SPEECH,
+    DAY_SKILL,
+    DAY_VOTE,
+    EXECUTION,
+    HUNTER_SHOOT,
+    WHITE_WOLF_KING_EXPLODE,
+    GAME_OVER
+}
