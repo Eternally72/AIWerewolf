@@ -13,6 +13,7 @@ AI Werewolf 是一个 Java 21 + Spring Boot + Vue 3 的多 Agent 狼人杀项目
 
 - 多 Agent：每个 AI 玩家拥有独立角色、视角、记忆和策略。
 - 信息隔离：所有外部输出由 `GameViewBuilder` 构建，禁止把完整真相直接给普通玩家或 AI。
+- 角色 Prompt：每个角色都有独立系统提示词，位于 `server/src/main/resources/prompts/roles/`。
 - 实时游戏：REST 恢复状态，WebSocket/STOMP 推送阶段、时间线和公共事件。
 - 可开源：默认 Mock LLM，真实密钥只从环境变量读取。
 - 可扩展：角色能力接口、状态机、记忆作用域和默认模板均可继续扩展。
