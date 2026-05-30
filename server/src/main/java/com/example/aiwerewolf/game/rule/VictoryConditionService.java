@@ -2,6 +2,7 @@ package com.example.aiwerewolf.game.rule;
 
 import com.example.aiwerewolf.player.entity.PlayerEntity;
 import com.example.aiwerewolf.role.model.Camp;
+import com.example.aiwerewolf.role.model.Role;
 import com.example.aiwerewolf.role.model.RoleCategory;
 import org.springframework.stereotype.Service;
 
@@ -10,7 +11,7 @@ import java.util.List;
 @Service
 public class VictoryConditionService {
     public VictoryResult checkVictory(List<PlayerEntity> players, VictoryRule rule) {
-        long aliveWolves = players.stream().filter(PlayerEntity::isAlive).filter(p -> p.getRole().isWerewolfCamp()).count();
+        long aliveWolves = players.stream().filter(PlayerEntity::isAlive).filter(this::isWerewolf).count();
         long aliveGood = players.stream().filter(PlayerEntity::isAlive).filter(p -> p.getCamp() == Camp.GOOD).count();
         long aliveVillagers = players.stream().filter(PlayerEntity::isAlive).filter(p -> p.getRoleCategory() == RoleCategory.VILLAGER).count();
         long aliveGods = players.stream().filter(PlayerEntity::isAlive).filter(p -> p.getRoleCategory() == RoleCategory.GOD).count();
@@ -34,5 +35,10 @@ public class VictoryConditionService {
             return VictoryResult.win(Camp.WEREWOLF, "所有神职角色已死亡");
         }
         return VictoryResult.ongoing();
+    }
+
+    private boolean isWerewolf(PlayerEntity player) {
+        Role role = player.getRole();
+        return role != null && role.isWerewolfCamp();
     }
 }

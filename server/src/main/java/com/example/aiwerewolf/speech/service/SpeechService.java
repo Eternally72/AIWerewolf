@@ -12,9 +12,12 @@ import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.role.model.Role;
 import com.example.aiwerewolf.speech.entity.SpeechEntity;
 import com.example.aiwerewolf.speech.repository.SpeechRepository;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class SpeechService {
@@ -37,7 +40,7 @@ public class SpeechService {
     }
 
     public SpeechEntity submitHumanSpeech(String roomId, int round, String playerId, SpeechRequest request) {
-        PlayerEntity player = playerRepository.findById(playerId)
+        PlayerEntity player = findPlayer(playerId)
                 .orElseThrow(() -> new BusinessException("PLAYER_NOT_FOUND", "玩家不存在"));
         if (!player.isAlive() || !player.isCanSpeak()) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "当前玩家不能发言");
@@ -61,7 +64,7 @@ public class SpeechService {
         return speechRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().filter(SpeechEntity::isPublicVisible).toList();
     }
 
-    private SpeechEntity saveSpeech(String roomId, int round, String playerId, String content, Role claimedRole) {
+    private SpeechEntity saveSpeech(String roomId, int round, String playerId, String content, @Nullable Role claimedRole) {
         return speechRepository.findByRoomIdAndRoundNumberAndPlayerId(roomId, round, playerId)
                 .orElseGet(() -> {
                     SpeechEntity speech = new SpeechEntity();
@@ -77,7 +80,8 @@ public class SpeechService {
                 });
     }
 
-    private Role parseRole(String claimedRole) {
+    @Nullable
+    private Role parseRole(@Nullable String claimedRole) {
         if (claimedRole == null || claimedRole.isBlank() || "好人".equals(claimedRole)) {
             return null;
         }
@@ -87,5 +91,9 @@ public class SpeechService {
             }
         }
         return null;
+    }
+
+    private Optional<PlayerEntity> findPlayer(String playerId) {
+        return playerRepository.findById(Objects.requireNonNull(playerId, "playerId must not be null"));
     }
 }

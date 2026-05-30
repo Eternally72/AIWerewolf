@@ -4,6 +4,7 @@ import com.example.aiwerewolf.game.phase.GamePhase;
 import com.example.aiwerewolf.role.model.Camp;
 import com.example.aiwerewolf.role.model.Role;
 import com.example.aiwerewolf.room.entity.RoomStatus;
+import org.springframework.lang.Nullable;
 
 import java.util.List;
 
@@ -13,9 +14,9 @@ public record GameView(
         RoomStatus status,
         GamePhase phase,
         int roundNumber,
-        String viewerPlayerId,
-        Role ownRole,
-        Camp ownCamp,
+        @Nullable String viewerPlayerId,
+        @Nullable Role ownRole,
+        @Nullable Camp ownCamp,
         List<PlayerView> players,
         List<MemoryView> memories,
         List<SpeechView> speeches,

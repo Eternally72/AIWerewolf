@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 public class RoleAbilityRegistry {
@@ -33,7 +34,11 @@ public class RoleAbilityRegistry {
     }
 
     public RoleAbility get(Role role) {
-        return abilities.get(role);
+        return find(role).orElseThrow(() -> new IllegalArgumentException("Unsupported role: " + role));
+    }
+
+    public Optional<RoleAbility> find(Role role) {
+        return Optional.ofNullable(abilities.get(role));
     }
 
     public List<RoleAbility> list() {

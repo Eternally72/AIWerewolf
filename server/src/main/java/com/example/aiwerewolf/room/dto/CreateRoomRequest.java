@@ -8,14 +8,15 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.lang.Nullable;
 
 public record CreateRoomRequest(
         @NotBlank String roomName,
         @Min(6) @Max(18) int totalSeats,
         @NotNull HumanMode humanMode,
-        String humanPlayerName,
+        @Nullable String humanPlayerName,
         @NotNull HumanRoleAssignMode humanRoleAssignMode,
-        Role specifiedHumanRole,
+        @Nullable Role specifiedHumanRole,
         @NotNull ObserverViewMode observerViewMode,
         @NotNull @Valid RoleConfig roleConfig,
         @NotNull @Valid RuleConfig ruleConfig,

@@ -1,8 +1,9 @@
 package com.example.aiwerewolf.game.rule;
 
 import com.example.aiwerewolf.role.model.Camp;
+import org.springframework.lang.Nullable;
 
-public record VictoryResult(boolean gameOver, Camp winner, String reason) {
+public record VictoryResult(boolean gameOver, @Nullable Camp winner, String reason) {
     public static VictoryResult ongoing() {
         return new VictoryResult(false, null, "游戏继续");
     }

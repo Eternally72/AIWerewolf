@@ -9,11 +9,14 @@ import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.room.entity.ObserverViewMode;
 import com.example.aiwerewolf.room.entity.RoomEntity;
 import com.example.aiwerewolf.room.repository.RoomRepository;
+import com.example.aiwerewolf.role.model.Camp;
 import com.example.aiwerewolf.speech.repository.SpeechRepository;
 import com.example.aiwerewolf.vote.repository.VoteRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class GameViewBuilder {
@@ -59,7 +62,7 @@ public class GameViewBuilder {
 
     public GameView buildPrivateView(String roomId, String playerId) {
         RoomEntity room = room(roomId);
-        PlayerEntity viewer = playerRepository.findById(playerId)
+        PlayerEntity viewer = findPlayer(playerId)
                 .filter(p -> p.getRoomId().equals(roomId))
                 .orElseThrow(() -> new BusinessException("PLAYER_NOT_FOUND", "玩家不存在"));
         return new GameView(
@@ -81,7 +84,7 @@ public class GameViewBuilder {
 
     public GameView buildWerewolfTeamView(String roomId, String playerId) {
         GameView privateView = buildPrivateView(roomId, playerId);
-        if (privateView.ownCamp() == null || !privateView.ownCamp().name().equals("WEREWOLF")) {
+        if (privateView.ownCamp() != Camp.WEREWOLF) {
             return privateView;
         }
         return privateView;
@@ -122,8 +125,12 @@ public class GameViewBuilder {
                 .toList();
     }
 
+    private Optional<PlayerEntity> findPlayer(String playerId) {
+        return playerRepository.findById(Objects.requireNonNull(playerId, "playerId must not be null"));
+    }
+
     private RoomEntity room(String roomId) {
-        return roomRepository.findById(roomId)
+        return roomRepository.findById(Objects.requireNonNull(roomId, "roomId must not be null"))
                 .orElseThrow(() -> new BusinessException("ROOM_NOT_FOUND", "房间不存在"));
     }
 }

@@ -10,6 +10,7 @@ import com.example.aiwerewolf.game.view.GameView;
 import com.example.aiwerewolf.game.view.PlayerView;
 import com.example.aiwerewolf.role.model.Role;
 import org.springframework.stereotype.Service;
+import org.springframework.lang.Nullable;
 
 @Service
 public class AiAgentService {
@@ -61,6 +62,7 @@ public class AiAgentService {
         return new AiActionDecision(ActionType.NONE, null, null, "暂不发动白天技能");
     }
 
+    @Nullable
     private String firstOtherAlive(String agentId, GameView view) {
         return view.players().stream()
                 .filter(PlayerView::alive)
@@ -70,17 +72,21 @@ public class AiAgentService {
                 .orElse(null);
     }
 
+    @Nullable
     private String firstGoodAlive(String agentId, GameView view) {
         return view.players().stream()
                 .filter(PlayerView::alive)
                 .filter(p -> !p.id().equals(agentId))
-                .filter(p -> p.role() == null || !p.role().isWerewolfCamp())
+                .filter(p -> {
+                    Role visibleRole = p.role();
+                    return visibleRole == null || !visibleRole.isWerewolfCamp();
+                })
                 .map(PlayerView::id)
                 .findFirst()
                 .orElse(firstOtherAlive(agentId, view));
     }
 
-    private boolean sameWerewolfTeam(Role ownRole, Role visibleRole) {
+    private boolean sameWerewolfTeam(@Nullable Role ownRole, @Nullable Role visibleRole) {
         return ownRole != null && visibleRole != null && ownRole.isWerewolfCamp() && visibleRole.isWerewolfCamp();
     }
 }

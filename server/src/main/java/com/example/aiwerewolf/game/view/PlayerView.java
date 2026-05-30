@@ -4,6 +4,7 @@ import com.example.aiwerewolf.player.entity.PlayerEntity;
 import com.example.aiwerewolf.player.entity.PlayerType;
 import com.example.aiwerewolf.role.model.Camp;
 import com.example.aiwerewolf.role.model.Role;
+import org.springframework.lang.Nullable;
 
 public record PlayerView(
         String id,
@@ -13,8 +14,8 @@ public record PlayerView(
         boolean alive,
         boolean canSpeak,
         boolean canVote,
-        Role role,
-        Camp camp
+        @Nullable Role role,
+        @Nullable Camp camp
 ) {
     public static PlayerView publicOf(PlayerEntity player) {
         return new PlayerView(

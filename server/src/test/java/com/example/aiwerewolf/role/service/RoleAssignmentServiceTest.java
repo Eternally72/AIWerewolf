@@ -22,6 +22,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@SuppressWarnings("null")
 class RoleAssignmentServiceTest {
     private final PlayerRepository playerRepository = mock(PlayerRepository.class);
     private final RoleAssignmentService service = new RoleAssignmentService(playerRepository);

@@ -39,7 +39,8 @@ public class RoleAssignmentService {
         if (config.goodCampTotal() < 1) {
             throw new BusinessException("INVALID_ROLE_CONFIG", "至少需要 1 名好人阵营角色");
         }
-        if (request.humanMode() == HumanMode.NONE && request.humanPlayerName() != null && !request.humanPlayerName().isBlank()) {
+        String humanPlayerName = request.humanPlayerName();
+        if (request.humanMode() == HumanMode.NONE && humanPlayerName != null && !humanPlayerName.isBlank()) {
             throw new BusinessException("INVALID_ROLE_CONFIG", "全 AI 模式下不能配置真人玩家");
         }
         if (request.humanRoleAssignMode() == HumanRoleAssignMode.SPECIFIED) {

@@ -11,11 +11,13 @@ import com.example.aiwerewolf.player.entity.PlayerType;
 import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.vote.entity.VoteEntity;
 import com.example.aiwerewolf.vote.repository.VoteRepository;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -41,12 +43,12 @@ public class VoteService {
     }
 
     public VoteEntity submitHumanVote(String roomId, int round, String playerId, VoteRequest request) {
-        PlayerEntity voter = playerRepository.findById(playerId)
+        PlayerEntity voter = findPlayer(playerId)
                 .orElseThrow(() -> new BusinessException("PLAYER_NOT_FOUND", "玩家不存在"));
         if (!voter.isAlive() || !voter.isCanVote()) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "当前玩家不能投票");
         }
-        playerRepository.findById(request.targetPlayerId())
+        findPlayer(request.targetPlayerId())
                 .filter(PlayerEntity::isAlive)
                 .orElseThrow(() -> new BusinessException("ILLEGAL_TARGET", "投票目标非法"));
         return saveVote(roomId, round, playerId, request.targetPlayerId(), request.reason());
@@ -80,7 +82,7 @@ public class VoteService {
         return leaders.size() == 1 ? Optional.of(leaders.getFirst()) : Optional.empty();
     }
 
-    public VoteEntity saveVote(String roomId, int round, String voterId, String targetId, String reason) {
+    public VoteEntity saveVote(String roomId, int round, String voterId, String targetId, @Nullable String reason) {
         return voteRepository.findByRoomIdAndRoundNumberAndVoterPlayerId(roomId, round, voterId)
                 .orElseGet(() -> {
                     VoteEntity vote = new VoteEntity();
@@ -94,5 +96,9 @@ public class VoteService {
                             voterId + " 投票给 " + targetId);
                     return saved;
                 });
+    }
+
+    private Optional<PlayerEntity> findPlayer(String playerId) {
+        return playerRepository.findById(Objects.requireNonNull(playerId, "playerId must not be null"));
     }
 }

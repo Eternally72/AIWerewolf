@@ -16,10 +16,12 @@ import com.example.aiwerewolf.room.entity.RoomStatus;
 import com.example.aiwerewolf.room.repository.RoomRepository;
 import com.example.aiwerewolf.speech.service.SpeechService;
 import com.example.aiwerewolf.vote.service.VoteService;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -53,7 +55,8 @@ public class GamePhaseEngine {
 
     @Transactional
     public RoomEntity advancePhase(String roomId) {
-        RoomEntity room = room(roomId);
+        String safeRoomId = Objects.requireNonNull(roomId, "roomId must not be null");
+        RoomEntity room = room(safeRoomId);
         if (room.getStatus() == RoomStatus.PAUSED) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "游戏已暂停");
         }
@@ -63,17 +66,18 @@ public class GamePhaseEngine {
             if (room.getPhase() == GamePhase.NIGHT) {
                 room.setCurrentRound(room.getCurrentRound() + 1);
             }
-            memoryService.appendPublicMemory(roomId, room.getCurrentRound(), room.getPhase(), "PHASE_CHANGED", "阶段切换：" + room.getPhase());
+            memoryService.appendPublicMemory(safeRoomId, room.getCurrentRound(), room.getPhase(), "PHASE_CHANGED", "阶段切换：" + room.getPhase());
         }
         return roomRepository.save(room);
     }
 
     @Transactional
     public RoomEntity advanceUntilHumanInputRequired(String roomId) {
-        RoomEntity room = room(roomId);
+        String safeRoomId = Objects.requireNonNull(roomId, "roomId must not be null");
+        RoomEntity room = room(safeRoomId);
         int guard = 0;
         while (guard++ < 32 && room.getStatus() == RoomStatus.RUNNING && !humanInputRequired(room) && room.getPhase() != GamePhase.GAME_OVER) {
-            room = advancePhase(roomId);
+            room = advancePhase(safeRoomId);
         }
         return room;
     }
@@ -90,7 +94,7 @@ public class GamePhaseEngine {
             case DAY_VOTE -> voteService.generateAiVotes(room.getId(), round);
             case EXECUTION -> {
                 Optional<String> targetId = voteService.calculateVoteResult(room.getId(), round);
-                targetId.flatMap(playerRepository::findById).ifPresent(player -> deathResolutionService.exilePlayer(player, room.getId(), round));
+                targetId.flatMap(this::findPlayer).ifPresent(player -> deathResolutionService.exilePlayer(player, room.getId(), round));
                 checkVictory(room);
             }
             default -> {
@@ -143,8 +147,12 @@ public class GamePhaseEngine {
         };
     }
 
+    private Optional<PlayerEntity> findPlayer(@NonNull String playerId) {
+        return playerRepository.findById(playerId);
+    }
+
     private RoomEntity room(String roomId) {
-        return roomRepository.findById(roomId)
+        return roomRepository.findById(Objects.requireNonNull(roomId, "roomId must not be null"))
                 .orElseThrow(() -> new BusinessException("ROOM_NOT_FOUND", "房间不存在"));
     }
 }

@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Objects;
 
 @Service
 public class RoomService {
@@ -90,7 +91,7 @@ public class RoomService {
         if (request.ruleConfig().autoAdvance()) {
             gamePhaseEngine.advanceUntilHumanInputRequired(roomId);
         }
-        return toResponse(roomRepository.findById(roomId).orElseThrow());
+        return toResponse(room(roomId));
     }
 
     @Transactional
@@ -141,7 +142,7 @@ public class RoomService {
     }
 
     private RoomEntity room(String roomId) {
-        return roomRepository.findById(roomId)
+        return roomRepository.findById(Objects.requireNonNull(roomId, "roomId must not be null"))
                 .orElseThrow(() -> new BusinessException("ROOM_NOT_FOUND", "房间不存在"));
     }
 

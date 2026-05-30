@@ -1,12 +1,13 @@
 package com.example.aiwerewolf.common.response;
 
 import java.time.Instant;
+import org.springframework.lang.Nullable;
 
 public record ApiResponse<T>(
         boolean success,
         String code,
         String message,
-        T data,
+        @Nullable T data,
         Instant timestamp
 ) {
     public static <T> ApiResponse<T> ok(T data) {

@@ -37,7 +37,7 @@ flowchart LR
   Room --> Engine[GamePhaseEngine]
   Engine --> Action[Night/Day/Vote/Death Services]
   Engine --> Agent[AiAgentService]
-  Agent --> LLM[LlmClient: Mock/OpenAI-compatible]
+  Agent --> LLM[LlmClient: Mock/Alibaba Bailian]
   Action --> Memory[MemoryService]
   View --> Memory
   Memory --> DB[(MySQL)]

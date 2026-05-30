@@ -27,4 +27,12 @@ public class RoundEntity {
         if (id == null) id = UUID.randomUUID().toString();
         if (startedAt == null) startedAt = Instant.now();
     }
+
+    public Instant getEndedAt() {
+        return endedAt;
+    }
+
+    public void setEndedAt(Instant endedAt) {
+        this.endedAt = endedAt;
+    }
 }

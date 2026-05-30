@@ -19,6 +19,7 @@ import com.example.aiwerewolf.vote.service.VoteRequest;
 import com.example.aiwerewolf.vote.service.VoteService;
 import com.example.aiwerewolf.websocket.WebSocketPushService;
 import jakarta.validation.Valid;
+import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -58,55 +59,59 @@ public class RoomController {
 
     @PostMapping("/rooms")
     public ApiResponse<RoomResponse> createRoom(@Valid @RequestBody CreateRoomRequest request) {
-        RoomResponse response = roomService.createRoom(request);
-        pushService.pushPublicEvent(response.id(), response);
-        return ApiResponse.ok(response);
+        RoomResponse response = requireData(roomService.createRoom(request), "room response");
+        String responseRoomId = requiredId(response.id(), "response.roomId");
+        pushService.pushPublicEvent(responseRoomId, response);
+        return ok(response);
     }
 
     @GetMapping("/rooms/{roomId}")
     public ApiResponse<RoomResponse> getRoom(@PathVariable String roomId) {
-        return ApiResponse.ok(roomService.getRoom(roomId));
+        return ok(roomService.getRoom(requiredId(roomId, "roomId")));
     }
 
     @PostMapping("/rooms/{roomId}/start")
     public ApiResponse<RoomResponse> start(@PathVariable String roomId) {
-        RoomResponse response = roomService.startGame(roomId);
-        pushService.pushPhaseChanged(roomId, response);
-        return ApiResponse.ok(response);
+        String safeRoomId = requiredId(roomId, "roomId");
+        RoomResponse response = requireData(roomService.startGame(safeRoomId), "room response");
+        pushService.pushPhaseChanged(safeRoomId, response);
+        return ok(response);
     }
 
     @PostMapping("/rooms/{roomId}/pause")
     public ApiResponse<RoomResponse> pause(@PathVariable String roomId) {
-        return ApiResponse.ok(roomService.pauseGame(roomId));
+        return ok(roomService.pauseGame(requiredId(roomId, "roomId")));
     }
 
     @PostMapping("/rooms/{roomId}/resume")
     public ApiResponse<RoomResponse> resume(@PathVariable String roomId) {
-        return ApiResponse.ok(roomService.resumeGame(roomId));
+        return ok(roomService.resumeGame(requiredId(roomId, "roomId")));
     }
 
     @PostMapping("/rooms/{roomId}/advance")
     public ApiResponse<RoomResponse> advance(@PathVariable String roomId) {
-        RoomResponse response = roomService.toResponse(gamePhaseEngine.advancePhase(roomId));
-        pushService.pushPhaseChanged(roomId, response);
-        return ApiResponse.ok(response);
+        String safeRoomId = requiredId(roomId, "roomId");
+        RoomResponse response = requireData(roomService.toResponse(gamePhaseEngine.advancePhase(safeRoomId)), "room response");
+        pushService.pushPhaseChanged(safeRoomId, response);
+        return ok(response);
     }
 
     @PostMapping("/rooms/{roomId}/auto-advance")
     public ApiResponse<RoomResponse> autoAdvance(@PathVariable String roomId) {
-        RoomResponse response = roomService.toResponse(gamePhaseEngine.advanceUntilHumanInputRequired(roomId));
-        pushService.pushPhaseChanged(roomId, response);
-        return ApiResponse.ok(response);
+        String safeRoomId = requiredId(roomId, "roomId");
+        RoomResponse response = requireData(roomService.toResponse(gamePhaseEngine.advanceUntilHumanInputRequired(safeRoomId)), "room response");
+        pushService.pushPhaseChanged(safeRoomId, response);
+        return ok(response);
     }
 
     @GetMapping("/rooms/{roomId}/public-view")
     public ApiResponse<GameView> publicView(@PathVariable String roomId) {
-        return ApiResponse.ok(gameViewBuilder.buildPublicView(roomId));
+        return ok(gameViewBuilder.buildPublicView(requiredId(roomId, "roomId")));
     }
 
     @GetMapping("/rooms/{roomId}/players/{playerId}/private-view")
     public ApiResponse<GameView> privateView(@PathVariable String roomId, @PathVariable String playerId) {
-        return ApiResponse.ok(gameViewBuilder.buildPrivateView(roomId, playerId));
+        return ok(gameViewBuilder.buildPrivateView(requiredId(roomId, "roomId"), requiredId(playerId, "playerId")));
     }
 
     @GetMapping("/rooms/{roomId}/god-view")
@@ -114,26 +119,30 @@ public class RoomController {
         if (!god) {
             throw new BusinessException("ACCESS_DENIED", "普通玩家不能访问上帝视角");
         }
-        return ApiResponse.ok(gameViewBuilder.buildGodView(roomId));
+        return ok(gameViewBuilder.buildGodView(requiredId(roomId, "roomId")));
     }
 
     @PostMapping("/rooms/{roomId}/players/{playerId}/speech")
     public ApiResponse<Void> speech(@PathVariable String roomId, @PathVariable String playerId, @Valid @RequestBody SpeechRequest request) {
-        speechService.submitHumanSpeech(roomId, 1, playerId, request);
-        pushService.pushTimelineUpdated(roomId, gameViewBuilder.buildPublicView(roomId));
+        String safeRoomId = requiredId(roomId, "roomId");
+        speechService.submitHumanSpeech(safeRoomId, 1, requiredId(playerId, "playerId"), request);
+        GameView view = requireData(gameViewBuilder.buildPublicView(safeRoomId), "public view");
+        pushService.pushTimelineUpdated(safeRoomId, view);
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/rooms/{roomId}/players/{playerId}/vote")
     public ApiResponse<Void> vote(@PathVariable String roomId, @PathVariable String playerId, @Valid @RequestBody VoteRequest request) {
-        voteService.submitHumanVote(roomId, 1, playerId, request);
-        pushService.pushTimelineUpdated(roomId, gameViewBuilder.buildPublicView(roomId));
+        String safeRoomId = requiredId(roomId, "roomId");
+        voteService.submitHumanVote(safeRoomId, 1, requiredId(playerId, "playerId"), request);
+        GameView view = requireData(gameViewBuilder.buildPublicView(safeRoomId), "public view");
+        pushService.pushTimelineUpdated(safeRoomId, view);
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/rooms/{roomId}/players/{playerId}/night-action")
     public ApiResponse<Void> nightAction(@PathVariable String roomId, @PathVariable String playerId, @Valid @RequestBody GameActionRequest request) {
-        nightActionService.submitHumanNightAction(roomId, 1, playerId, request);
+        nightActionService.submitHumanNightAction(requiredId(roomId, "roomId"), 1, requiredId(playerId, "playerId"), request);
         return ApiResponse.ok(null);
     }
 
@@ -144,12 +153,12 @@ public class RoomController {
 
     @GetMapping("/rooms/{roomId}/timeline/public")
     public ApiResponse<GameView> publicTimeline(@PathVariable String roomId) {
-        return ApiResponse.ok(gameViewBuilder.buildPublicView(roomId));
+        return ok(gameViewBuilder.buildPublicView(requiredId(roomId, "roomId")));
     }
 
     @GetMapping("/rooms/{roomId}/timeline/private/{playerId}")
     public ApiResponse<GameView> privateTimeline(@PathVariable String roomId, @PathVariable String playerId) {
-        return ApiResponse.ok(gameViewBuilder.buildPrivateView(roomId, playerId));
+        return ok(gameViewBuilder.buildPrivateView(requiredId(roomId, "roomId"), requiredId(playerId, "playerId")));
     }
 
     @GetMapping("/rooms/{roomId}/timeline/god")
@@ -159,11 +168,37 @@ public class RoomController {
 
     @GetMapping("/roles")
     public ApiResponse<List<RoleInfoResponse>> roles() {
-        return ApiResponse.ok(roleCatalogService.listRoles());
+        return ok(roleCatalogService.listRoles());
     }
 
     @GetMapping("/default-configs")
     public ApiResponse<DefaultConfigResponse> defaultConfigs() {
-        return ApiResponse.ok(defaultConfigService.defaults());
+        return ok(defaultConfigService.defaults());
+    }
+
+    @NonNull
+    private String requiredId(String value, String name) {
+        if (value == null) {
+            throw new BusinessException("VALIDATION_ERROR", name + " must not be null");
+        }
+        return value;
+    }
+
+    @NonNull
+    private <T> ApiResponse<T> ok(T data) {
+        T safeData = requireData(data, "response data");
+        ApiResponse<T> response = ApiResponse.ok(safeData);
+        if (response == null) {
+            throw new BusinessException("INTERNAL_ERROR", "api response must not be null");
+        }
+        return response;
+    }
+
+    @NonNull
+    private <T> T requireData(T data, String name) {
+        if (data == null) {
+            throw new BusinessException("INTERNAL_ERROR", name + " must not be null");
+        }
+        return data;
     }
 }

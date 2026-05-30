@@ -1,11 +1,12 @@
 package com.example.aiwerewolf.agent.prompt;
 
 import com.example.aiwerewolf.role.model.Role;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AgentPromptFactory {
-    public String buildSystemPrompt(Role role) {
+    public String buildSystemPrompt(@Nullable Role role) {
         if (role == null) {
             return commonRule("未知身份", "只依据可见信息行动，不访问任何隐藏真相。");
         }
