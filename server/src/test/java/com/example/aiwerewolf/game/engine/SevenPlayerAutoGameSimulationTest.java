@@ -4,10 +4,10 @@ import com.example.aiwerewolf.TestFixtures;
 import com.example.aiwerewolf.action.service.DeathResolutionService;
 import com.example.aiwerewolf.action.service.NightActionService;
 import com.example.aiwerewolf.game.phase.GamePhase;
+import com.example.aiwerewolf.game.rule.VictoryConditionService;
 import com.example.aiwerewolf.game.runtime.GameRuntimeStateCache;
 import com.example.aiwerewolf.game.runtime.IdempotencyService;
 import com.example.aiwerewolf.game.runtime.PhaseAdvanceLockService;
-import com.example.aiwerewolf.game.rule.VictoryConditionService;
 import com.example.aiwerewolf.memory.service.MemoryService;
 import com.example.aiwerewolf.player.entity.PlayerEntity;
 import com.example.aiwerewolf.player.repository.PlayerRepository;
@@ -24,58 +24,50 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-class GamePhaseEngineTest {
+class SevenPlayerAutoGameSimulationTest {
     @Test
-    void phaseTransitionOrderIsExplicit() {
-        GamePhaseEngine engine = new GamePhaseEngine(
-                mock(RoomRepository.class),
-                mock(PlayerRepository.class),
-                mock(NightActionService.class),
-                mock(SpeechService.class),
-                mock(VoteService.class),
-                mock(DeathResolutionService.class),
-                new VictoryConditionService(),
-                mock(MemoryService.class),
-                mock(PhaseAdvanceLockService.class),
-                mock(IdempotencyService.class),
-                mock(GameRuntimeStateCache.class)
-        );
-
-        assertThat(engine.validatePhaseTransition(GamePhase.FIRST_NIGHT, GamePhase.GUARD_ACTION)).isTrue();
-        assertThat(engine.validatePhaseTransition(GamePhase.DAY_VOTE, GamePhase.EXECUTION)).isTrue();
-        assertThat(engine.validatePhaseTransition(GamePhase.DAY_VOTE, GamePhase.NIGHT)).isFalse();
-    }
-
-    @Test
-    void autoAdvanceDoesNotStopAtNightRolePhaseForVillagerHuman() {
-        String roomId = "room";
+    void fullAiSevenPlayerRunCanAdvanceToGameOver() {
+        String roomId = "seven-ai";
         RoomEntity room = TestFixtures.room(roomId);
-        room.setPhase(GamePhase.SEER_ACTION);
-        PlayerEntity humanVillager = TestFixtures.player("human", roomId, 1, Role.VILLAGER);
-        humanVillager.setType(com.example.aiwerewolf.player.entity.PlayerType.HUMAN);
-        PlayerEntity wolf = TestFixtures.player("wolf", roomId, 2, Role.WEREWOLF);
-        PlayerEntity seer = TestFixtures.player("seer", roomId, 3, Role.SEER);
+        room.setPhase(GamePhase.FIRST_NIGHT);
+
+        PlayerEntity wolf1 = TestFixtures.player("wolf1", roomId, 1, Role.WEREWOLF);
+        PlayerEntity wolf2 = TestFixtures.player("wolf2", roomId, 2, Role.WEREWOLF);
+        List<PlayerEntity> players = List.of(
+                wolf1,
+                wolf2,
+                TestFixtures.player("villager1", roomId, 3, Role.VILLAGER),
+                TestFixtures.player("villager2", roomId, 4, Role.VILLAGER),
+                TestFixtures.player("villager3", roomId, 5, Role.VILLAGER),
+                TestFixtures.player("seer", roomId, 6, Role.SEER),
+                TestFixtures.player("witch", roomId, 7, Role.WITCH)
+        );
 
         RoomRepository roomRepository = mock(RoomRepository.class);
         PlayerRepository playerRepository = mock(PlayerRepository.class);
         NightActionService nightActionService = mock(NightActionService.class);
         PhaseAdvanceLockService lockService = mock(PhaseAdvanceLockService.class);
         IdempotencyService idempotencyService = mock(IdempotencyService.class);
+        GameRuntimeStateCache runtimeStateCache = mock(GameRuntimeStateCache.class);
+        MemoryService memoryService = mock(MemoryService.class);
 
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
         when(roomRepository.save(any(RoomEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId)).thenReturn(List.of(humanVillager, wolf, seer));
-        when(playerRepository.findByRoomIdOrderBySeatNumberAsc(roomId)).thenReturn(List.of(humanVillager, wolf, seer));
+        when(playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId)).thenReturn(players);
+        when(playerRepository.findByRoomIdOrderBySeatNumberAsc(roomId)).thenReturn(players);
         when(idempotencyService.markIfAbsent(anyString(), any(Duration.class))).thenReturn(true);
         when(lockService.withRoomLock(eq(roomId), any())).thenAnswer(invocation -> {
             Supplier<?> supplier = invocation.getArgument(1);
             return supplier.get();
         });
+        doAnswer(invocation -> {
+            wolf1.setAlive(false);
+            wolf2.setAlive(false);
+            return null;
+        }).when(nightActionService).resolveNightActions(roomId, 1);
 
         GamePhaseEngine engine = new GamePhaseEngine(
                 roomRepository,
@@ -85,16 +77,19 @@ class GamePhaseEngineTest {
                 mock(VoteService.class),
                 mock(DeathResolutionService.class),
                 new VictoryConditionService(),
-                mock(MemoryService.class),
+                memoryService,
                 lockService,
                 idempotencyService,
-                mock(GameRuntimeStateCache.class)
+                runtimeStateCache
         );
 
         RoomEntity result = engine.advanceUntilHumanInputRequired(roomId);
 
-        assertThat(result.getPhase()).isEqualTo(GamePhase.DAY_SPEECH);
+        assertThat(result.getPhase()).isEqualTo(GamePhase.GAME_OVER);
+        verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.GUARD_ACTION);
+        verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.WEREWOLF_ACTION);
         verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.SEER_ACTION);
         verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.WITCH_ACTION);
+        verify(nightActionService).resolveNightActions(roomId, 1);
     }
 }

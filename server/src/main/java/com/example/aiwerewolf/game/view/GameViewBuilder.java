@@ -10,6 +10,7 @@ import com.example.aiwerewolf.room.entity.ObserverViewMode;
 import com.example.aiwerewolf.room.entity.RoomEntity;
 import com.example.aiwerewolf.room.repository.RoomRepository;
 import com.example.aiwerewolf.role.model.Camp;
+import com.example.aiwerewolf.role.model.LoverRelationRepository;
 import com.example.aiwerewolf.speech.repository.SpeechRepository;
 import com.example.aiwerewolf.vote.repository.VoteRepository;
 import org.springframework.stereotype.Service;
@@ -26,19 +27,22 @@ public class GameViewBuilder {
     private final MemoryEntryRepository memoryEntryRepository;
     private final SpeechRepository speechRepository;
     private final VoteRepository voteRepository;
+    private final LoverRelationRepository loverRelationRepository;
 
     public GameViewBuilder(RoomRepository roomRepository,
                            PlayerRepository playerRepository,
                            MemoryService memoryService,
                            MemoryEntryRepository memoryEntryRepository,
                            SpeechRepository speechRepository,
-                           VoteRepository voteRepository) {
+                           VoteRepository voteRepository,
+                           LoverRelationRepository loverRelationRepository) {
         this.roomRepository = roomRepository;
         this.playerRepository = playerRepository;
         this.memoryService = memoryService;
         this.memoryEntryRepository = memoryEntryRepository;
         this.speechRepository = speechRepository;
         this.voteRepository = voteRepository;
+        this.loverRelationRepository = loverRelationRepository;
     }
 
     public GameView buildPublicView(String roomId) {
@@ -48,7 +52,7 @@ public class GameViewBuilder {
                 room.getName(),
                 room.getStatus(),
                 room.getPhase(),
-                1,
+                room.getCurrentRound(),
                 null,
                 null,
                 null,
@@ -70,7 +74,7 @@ public class GameViewBuilder {
                 room.getName(),
                 room.getStatus(),
                 room.getPhase(),
-                1,
+                room.getCurrentRound(),
                 playerId,
                 viewer.getRole(),
                 viewer.getCamp(),
@@ -97,7 +101,7 @@ public class GameViewBuilder {
                 room.getName(),
                 room.getStatus(),
                 room.getPhase(),
-                1,
+                room.getCurrentRound(),
                 null,
                 null,
                 null,
@@ -115,13 +119,26 @@ public class GameViewBuilder {
 
     private List<PlayerView> privatePlayers(String roomId, PlayerEntity viewer) {
         boolean wolf = viewer.getRole() != null && viewer.getRole().isWerewolfCamp();
+        List<String> loverIds = loverIds(roomId, viewer.getId());
+        boolean thirdParty = viewer.getCamp() == Camp.THIRD_PARTY;
         return playerRepository.findByRoomIdOrderBySeatNumberAsc(roomId).stream()
                 .map(player -> {
-                    if (player.getId().equals(viewer.getId()) || (wolf && player.getRole() != null && player.getRole().isWerewolfCamp())) {
+                    boolean self = player.getId().equals(viewer.getId());
+                    boolean wolfMate = wolf && player.getRole() != null && player.getRole().isWerewolfCamp();
+                    boolean lover = loverIds.contains(player.getId());
+                    boolean thirdPartyMate = thirdParty && player.getCamp() == Camp.THIRD_PARTY;
+                    if (self || wolfMate || lover || thirdPartyMate) {
                         return PlayerView.fullOf(player);
                     }
                     return PlayerView.publicOf(player);
                 })
+                .toList();
+    }
+
+    private List<String> loverIds(String roomId, String viewerId) {
+        return loverRelationRepository.findByRoomId(roomId).stream()
+                .filter(relation -> relation.getPlayerAId().equals(viewerId) || relation.getPlayerBId().equals(viewerId))
+                .map(relation -> relation.getPlayerAId().equals(viewerId) ? relation.getPlayerBId() : relation.getPlayerAId())
                 .toList();
     }
 

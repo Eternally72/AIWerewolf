@@ -4,6 +4,9 @@ import com.example.aiwerewolf.action.service.DeathResolutionService;
 import com.example.aiwerewolf.action.service.NightActionService;
 import com.example.aiwerewolf.common.exception.BusinessException;
 import com.example.aiwerewolf.game.phase.GamePhase;
+import com.example.aiwerewolf.game.runtime.GameRuntimeStateCache;
+import com.example.aiwerewolf.game.runtime.IdempotencyService;
+import com.example.aiwerewolf.game.runtime.PhaseAdvanceLockService;
 import com.example.aiwerewolf.game.rule.VictoryConditionService;
 import com.example.aiwerewolf.game.rule.VictoryResult;
 import com.example.aiwerewolf.game.rule.VictoryRule;
@@ -11,6 +14,7 @@ import com.example.aiwerewolf.memory.service.MemoryService;
 import com.example.aiwerewolf.player.entity.PlayerEntity;
 import com.example.aiwerewolf.player.entity.PlayerType;
 import com.example.aiwerewolf.player.repository.PlayerRepository;
+import com.example.aiwerewolf.role.model.Role;
 import com.example.aiwerewolf.room.entity.RoomEntity;
 import com.example.aiwerewolf.room.entity.RoomStatus;
 import com.example.aiwerewolf.room.repository.RoomRepository;
@@ -23,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.time.Duration;
 
 @Service
 public class GamePhaseEngine {
@@ -34,6 +39,9 @@ public class GamePhaseEngine {
     private final DeathResolutionService deathResolutionService;
     private final VictoryConditionService victoryConditionService;
     private final MemoryService memoryService;
+    private final PhaseAdvanceLockService phaseAdvanceLockService;
+    private final IdempotencyService idempotencyService;
+    private final GameRuntimeStateCache runtimeStateCache;
 
     public GamePhaseEngine(RoomRepository roomRepository,
                            PlayerRepository playerRepository,
@@ -42,7 +50,10 @@ public class GamePhaseEngine {
                            VoteService voteService,
                            DeathResolutionService deathResolutionService,
                            VictoryConditionService victoryConditionService,
-                           MemoryService memoryService) {
+                           MemoryService memoryService,
+                           PhaseAdvanceLockService phaseAdvanceLockService,
+                           IdempotencyService idempotencyService,
+                           GameRuntimeStateCache runtimeStateCache) {
         this.roomRepository = roomRepository;
         this.playerRepository = playerRepository;
         this.nightActionService = nightActionService;
@@ -51,16 +62,26 @@ public class GamePhaseEngine {
         this.deathResolutionService = deathResolutionService;
         this.victoryConditionService = victoryConditionService;
         this.memoryService = memoryService;
+        this.phaseAdvanceLockService = phaseAdvanceLockService;
+        this.idempotencyService = idempotencyService;
+        this.runtimeStateCache = runtimeStateCache;
     }
 
     @Transactional
     public RoomEntity advancePhase(String roomId) {
         String safeRoomId = Objects.requireNonNull(roomId, "roomId must not be null");
+        return phaseAdvanceLockService.withRoomLock(safeRoomId, () -> advancePhaseLocked(safeRoomId));
+    }
+
+    private RoomEntity advancePhaseLocked(String safeRoomId) {
         RoomEntity room = room(safeRoomId);
         if (room.getStatus() == RoomStatus.PAUSED) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "游戏已暂停");
         }
-        processCurrentPhase(room);
+        String processKey = "idempotency:%s:%s:%s:process".formatted(safeRoomId, room.getCurrentRound(), room.getPhase());
+        if (idempotencyService.markIfAbsent(processKey, Duration.ofHours(12))) {
+            processCurrentPhase(room);
+        }
         if (room.getPhase() != GamePhase.GAME_OVER) {
             room.setPhase(nextPhase(room.getPhase()));
             if (room.getPhase() == GamePhase.NIGHT) {
@@ -68,7 +89,9 @@ public class GamePhaseEngine {
             }
             memoryService.appendPublicMemory(safeRoomId, room.getCurrentRound(), room.getPhase(), "PHASE_CHANGED", "阶段切换：" + room.getPhase());
         }
-        return roomRepository.save(room);
+        RoomEntity saved = roomRepository.save(room);
+        runtimeStateCache.put(saved);
+        return saved;
     }
 
     @Transactional
@@ -82,10 +105,25 @@ public class GamePhaseEngine {
         return room;
     }
 
+    @Transactional
+    public RoomEntity advanceUntilGameOver(String roomId) {
+        String safeRoomId = Objects.requireNonNull(roomId, "roomId must not be null");
+        RoomEntity room = room(safeRoomId);
+        int guard = 0;
+        while (guard++ < 200 && room.getStatus() == RoomStatus.RUNNING && room.getPhase() != GamePhase.GAME_OVER) {
+            room = advancePhase(safeRoomId);
+        }
+        if (room.getPhase() != GamePhase.GAME_OVER) {
+            throw new BusinessException("SIMULATION_LIMIT_REACHED", "模拟步数达到上限，游戏尚未结束");
+        }
+        return room;
+    }
+
     public void processCurrentPhase(RoomEntity room) {
         int round = room.getCurrentRound();
         switch (room.getPhase()) {
-            case FIRST_NIGHT, NIGHT -> nightActionService.generateAiNightActions(room.getId(), round);
+            case GUARD_ACTION, WEREWOLF_ACTION, SEER_ACTION, WITCH_ACTION, OTHER_NIGHT_ACTION ->
+                    nightActionService.generateAiNightActions(room.getId(), round, room.getPhase());
             case NIGHT_RESOLUTION -> {
                 nightActionService.resolveNightActions(room.getId(), round);
                 checkVictory(room);
@@ -118,11 +156,29 @@ public class GamePhaseEngine {
     }
 
     private boolean humanInputRequired(RoomEntity room) {
-        boolean hasAliveHuman = playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(room.getId()).stream()
-                .anyMatch(p -> p.getType() == PlayerType.HUMAN);
-        return hasAliveHuman && (room.getPhase() == GamePhase.DAY_SPEECH || room.getPhase() == GamePhase.DAY_VOTE
-                || room.getPhase() == GamePhase.WEREWOLF_ACTION || room.getPhase() == GamePhase.SEER_ACTION
-                || room.getPhase() == GamePhase.WITCH_ACTION || room.getPhase() == GamePhase.GUARD_ACTION);
+        return playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(room.getId()).stream()
+                .filter(player -> player.getType() == PlayerType.HUMAN)
+                .anyMatch(player -> humanCanActInPhase(player, room.getPhase()));
+    }
+
+    private boolean humanCanActInPhase(PlayerEntity player, GamePhase phase) {
+        if (phase == GamePhase.DAY_SPEECH) {
+            return player.isCanSpeak();
+        }
+        if (phase == GamePhase.DAY_VOTE) {
+            return player.isCanVote();
+        }
+        Role role = player.getRole();
+        if (role == null) {
+            return false;
+        }
+        return switch (phase) {
+            case WEREWOLF_ACTION -> role.isWerewolfCamp();
+            case SEER_ACTION -> role == Role.SEER;
+            case WITCH_ACTION -> role == Role.WITCH;
+            case GUARD_ACTION -> role == Role.GUARD;
+            default -> false;
+        };
     }
 
     private GamePhase nextPhase(GamePhase phase) {

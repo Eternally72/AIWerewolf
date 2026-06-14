@@ -7,7 +7,10 @@
           <h1>上帝视角</h1>
           <p>完整身份、阵营、私有策略摘要与时间线只在这里展示。</p>
         </div>
-        <button class="btn" @click="advance">快进到节点</button>
+        <div class="actions">
+          <button class="btn ghost" @click="advance">快进到节点</button>
+          <button class="btn" @click="simulate">模拟到结束</button>
+        </div>
       </header>
       <section class="glass table">
         <article v-for="player in view?.players ?? []" :key="player.id" class="row" :class="{ dead: !player.alive }">
@@ -41,6 +44,10 @@ async function advance() {
   await store.auto(roomId.value)
   await store.loadGod(roomId.value)
 }
+
+async function simulate() {
+  await store.simulate(roomId.value)
+}
 </script>
 
 <style scoped>
@@ -52,6 +59,12 @@ async function advance() {
 }
 .top p {
   color: #bdc8e8;
+}
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .table,
 .panel {

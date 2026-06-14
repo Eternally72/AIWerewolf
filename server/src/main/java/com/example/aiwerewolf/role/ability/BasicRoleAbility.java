@@ -33,8 +33,8 @@ public class BasicRoleAbility implements RoleAbility {
     }
 
     @Override
-    public String getNightActionType() {
-        return nightActionType.name();
+    public ActionType getNightActionType() {
+        return nightActionType;
     }
 
     @Override
@@ -49,6 +49,11 @@ public class BasicRoleAbility implements RoleAbility {
 
     @Override
     public boolean validateAction(GameView view, GameActionEntity action) {
+        if (role == Role.WITCH) {
+            return action.getActionType() == ActionType.SAVE
+                    || action.getActionType() == ActionType.POISON
+                    || action.getActionType() == ActionType.NONE;
+        }
         return action.getActionType() == nightActionType || action.getActionType() == ActionType.NONE;
     }
 

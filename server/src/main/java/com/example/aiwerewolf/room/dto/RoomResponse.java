@@ -4,6 +4,7 @@ import com.example.aiwerewolf.game.phase.GamePhase;
 import com.example.aiwerewolf.room.entity.HumanMode;
 import com.example.aiwerewolf.room.entity.ObserverViewMode;
 import com.example.aiwerewolf.room.entity.RoomStatus;
+import org.springframework.lang.Nullable;
 
 import java.time.Instant;
 
@@ -16,6 +17,7 @@ public record RoomResponse(
         HumanMode humanMode,
         ObserverViewMode observerViewMode,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        @Nullable String godViewToken
 ) {
 }

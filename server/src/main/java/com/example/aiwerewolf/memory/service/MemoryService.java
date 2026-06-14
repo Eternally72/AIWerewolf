@@ -11,9 +11,11 @@ import java.util.List;
 @Service
 public class MemoryService {
     private final MemoryEntryRepository memoryEntryRepository;
+    private final AgentShortTermMemoryService shortTermMemoryService;
 
-    public MemoryService(MemoryEntryRepository memoryEntryRepository) {
+    public MemoryService(MemoryEntryRepository memoryEntryRepository, AgentShortTermMemoryService shortTermMemoryService) {
         this.memoryEntryRepository = memoryEntryRepository;
+        this.shortTermMemoryService = shortTermMemoryService;
     }
 
     public MemoryEntryEntity appendPublicMemory(String roomId, int round, GamePhase phase, String type, String content) {
@@ -21,12 +23,16 @@ public class MemoryService {
     }
 
     public MemoryEntryEntity appendPrivateMemory(String roomId, int round, GamePhase phase, String playerId, String type, String content) {
-        return append(roomId, round, phase, MemoryScope.PRIVATE, playerId, playerId, type, content, "{}");
+        MemoryEntryEntity entry = append(roomId, round, phase, MemoryScope.PRIVATE, playerId, playerId, type, content, "{}");
+        shortTermMemoryService.appendObservation(roomId, playerId, content);
+        return entry;
     }
 
     public MemoryEntryEntity appendSharedSecretMemory(String roomId, int round, GamePhase phase, MemoryScope scope,
                                                       List<String> visibleTo, String type, String content) {
-        return append(roomId, round, phase, scope, null, String.join(",", visibleTo), type, content, "{}");
+        MemoryEntryEntity entry = append(roomId, round, phase, scope, null, String.join(",", visibleTo), type, content, "{}");
+        visibleTo.forEach(playerId -> shortTermMemoryService.appendObservation(roomId, playerId, content));
+        return entry;
     }
 
     public MemoryEntryEntity appendGodViewMemory(String roomId, int round, GamePhase phase, String type, String content) {

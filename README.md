@@ -24,7 +24,7 @@ AI Werewolf 是一个 Java 21 + Spring Boot + Vue 3 的多 Agent 狼人杀项目
 
 ## 技术栈
 
-后端：Java 21、Spring Boot 3、Maven、MySQL 8、Spring Data JPA、Flyway、WebSocket/STOMP、JUnit 5、Mockito。  
+后端：Java 21、Spring Boot 3、Maven、MySQL 8、Redis、Spring Data JPA、Flyway、WebSocket/STOMP、JUnit 5、Mockito。  
 前端：Vue 3、TypeScript、Vite、Pinia、Vue Router、Axios、STOMP。
 
 ## 架构
@@ -41,6 +41,8 @@ flowchart LR
   Agent --> LLM[LlmClient: Mock/Alibaba Bailian]
   Action --> Memory[MemoryService]
   View --> Memory
+  Engine --> Redis[(Redis: runtime/lock/idempotency/STM)]
+  Memory --> Redis
   Memory --> DB[(MySQL)]
 ```
 
@@ -51,6 +53,8 @@ cp .env.example .env
 docker compose -f docker-compose.example.yml up -d
 mvn spring-boot:run -pl server
 ```
+
+`docker-compose.example.yml` 会启动 MySQL 和 Redis。MySQL 保存长期事实和审计记录；Redis 用于运行态缓存、阶段推进锁、幂等键和 Agent 短期记忆。未启动 Redis 时，本地开发会自动降级到 JVM 内存，不影响基础启动和测试。
 
 前端：
 
@@ -85,6 +89,10 @@ curl -X POST http://localhost:8080/api/rooms \
 ```
 
 主要接口见 [docs/api.md](docs/api.md)。WebSocket 入口为 `/ws/game`，公共频道为 `/topic/rooms/{roomId}/public`。
+
+创建房间响应会返回一次性的 `godViewToken`。前端会保存到本地并通过 `X-God-View-Token` 请求头访问 GodView；普通请求不再支持 `?god=true`。
+
+全 AI 观战可调用 `POST /api/rooms/{roomId}/simulate` 一键模拟到游戏结束；真人参与时，`/auto-advance` 会停在真人当前角色真正能操作的阶段。
 
 ## 默认模板
 

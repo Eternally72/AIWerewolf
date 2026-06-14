@@ -3,6 +3,7 @@ package com.example.aiwerewolf.room.service;
 import com.example.aiwerewolf.common.exception.BusinessException;
 import com.example.aiwerewolf.game.engine.GamePhaseEngine;
 import com.example.aiwerewolf.game.phase.GamePhase;
+import com.example.aiwerewolf.game.runtime.GameRuntimeStateCache;
 import com.example.aiwerewolf.memory.service.MemoryService;
 import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.role.service.RoleAssignmentService;
@@ -13,6 +14,7 @@ import com.example.aiwerewolf.room.entity.RoomEntity;
 import com.example.aiwerewolf.room.entity.RoomStatus;
 import com.example.aiwerewolf.room.repository.GameConfigRepository;
 import com.example.aiwerewolf.room.repository.RoomRepository;
+import com.example.aiwerewolf.security.GodViewAccessService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Lazy;
@@ -29,6 +31,8 @@ public class RoomService {
     private final MemoryService memoryService;
     private final ObjectMapper objectMapper;
     private final GamePhaseEngine gamePhaseEngine;
+    private final GodViewAccessService godViewAccessService;
+    private final GameRuntimeStateCache runtimeStateCache;
 
     public RoomService(RoomRepository roomRepository,
                        GameConfigRepository gameConfigRepository,
@@ -36,7 +40,9 @@ public class RoomService {
                        PlayerRepository playerRepository,
                        MemoryService memoryService,
                        ObjectMapper objectMapper,
-                       @Lazy GamePhaseEngine gamePhaseEngine) {
+                       @Lazy GamePhaseEngine gamePhaseEngine,
+                       GodViewAccessService godViewAccessService,
+                       GameRuntimeStateCache runtimeStateCache) {
         this.roomRepository = roomRepository;
         this.gameConfigRepository = gameConfigRepository;
         this.roleAssignmentService = roleAssignmentService;
@@ -44,6 +50,8 @@ public class RoomService {
         this.memoryService = memoryService;
         this.objectMapper = objectMapper;
         this.gamePhaseEngine = gamePhaseEngine;
+        this.godViewAccessService = godViewAccessService;
+        this.runtimeStateCache = runtimeStateCache;
     }
 
     @Transactional
@@ -57,6 +65,7 @@ public class RoomService {
         room.setStatus(RoomStatus.WAITING);
         room.setPhase(GamePhase.WAITING);
         room = roomRepository.save(room);
+        runtimeStateCache.put(room);
 
         GameConfigEntity config = new GameConfigEntity();
         config.setRoomId(room.getId());
@@ -66,7 +75,7 @@ public class RoomService {
         gameConfigRepository.save(config);
 
         memoryService.appendPublicMemory(room.getId(), 1, GamePhase.WAITING, "ROOM_CREATED", "房间已创建：" + room.getName());
-        return toResponse(room);
+        return toResponse(room, godViewAccessService.issueToken(room.getId()));
     }
 
     public RoomResponse getRoom(String roomId) {
@@ -86,6 +95,7 @@ public class RoomService {
         room.setStatus(RoomStatus.RUNNING);
         room.setPhase(GamePhase.FIRST_NIGHT);
         roomRepository.save(room);
+        runtimeStateCache.put(room);
         memoryService.appendPublicMemory(roomId, room.getCurrentRound(), GamePhase.FIRST_NIGHT, "GAME_STARTED", "游戏开始，进入首夜");
         memoryService.appendGodViewMemory(roomId, room.getCurrentRound(), GamePhase.ROLE_ASSIGNED, "ROLE_ASSIGNED", "所有玩家身份已分配");
         if (request.ruleConfig().autoAdvance()) {
@@ -98,18 +108,26 @@ public class RoomService {
     public RoomResponse pauseGame(String roomId) {
         RoomEntity room = room(roomId);
         room.setStatus(RoomStatus.PAUSED);
-        return toResponse(roomRepository.save(room));
+        RoomEntity saved = roomRepository.save(room);
+        runtimeStateCache.put(saved);
+        return toResponse(saved);
     }
 
     @Transactional
     public RoomResponse resumeGame(String roomId) {
         RoomEntity room = room(roomId);
         room.setStatus(RoomStatus.RUNNING);
-        return toResponse(roomRepository.save(room));
+        RoomEntity saved = roomRepository.save(room);
+        runtimeStateCache.put(saved);
+        return toResponse(saved);
     }
 
     public RoomResponse getRoomStatus(String roomId) {
         return getRoom(roomId);
+    }
+
+    public int currentRound(String roomId) {
+        return room(roomId).getCurrentRound();
     }
 
     private CreateRoomRequest rebuildRequest(RoomEntity room) {
@@ -147,7 +165,11 @@ public class RoomService {
     }
 
     public RoomResponse toResponse(RoomEntity room) {
+        return toResponse(room, null);
+    }
+
+    public RoomResponse toResponse(RoomEntity room, String godViewToken) {
         return new RoomResponse(room.getId(), room.getName(), room.getStatus(), room.getPhase(), room.getTotalSeats(),
-                room.getHumanMode(), room.getObserverViewMode(), room.getCreatedAt(), room.getUpdatedAt());
+                room.getHumanMode(), room.getObserverViewMode(), room.getCreatedAt(), room.getUpdatedAt(), godViewToken);
     }
 }

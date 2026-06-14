@@ -3,6 +3,7 @@ package com.example.aiwerewolf.speech.service;
 import com.example.aiwerewolf.agent.core.AiAgentService;
 import com.example.aiwerewolf.agent.dto.AiSpeechDecision;
 import com.example.aiwerewolf.common.exception.BusinessException;
+import com.example.aiwerewolf.game.engine.GameOperationValidator;
 import com.example.aiwerewolf.game.phase.GamePhase;
 import com.example.aiwerewolf.game.view.GameViewBuilder;
 import com.example.aiwerewolf.memory.service.MemoryService;
@@ -26,22 +27,25 @@ public class SpeechService {
     private final AiAgentService aiAgentService;
     private final GameViewBuilder gameViewBuilder;
     private final MemoryService memoryService;
+    private final GameOperationValidator operationValidator;
 
     public SpeechService(SpeechRepository speechRepository,
                          PlayerRepository playerRepository,
                          AiAgentService aiAgentService,
                          GameViewBuilder gameViewBuilder,
-                         MemoryService memoryService) {
+                         MemoryService memoryService,
+                         GameOperationValidator operationValidator) {
         this.speechRepository = speechRepository;
         this.playerRepository = playerRepository;
         this.aiAgentService = aiAgentService;
         this.gameViewBuilder = gameViewBuilder;
         this.memoryService = memoryService;
+        this.operationValidator = operationValidator;
     }
 
     public SpeechEntity submitHumanSpeech(String roomId, int round, String playerId, SpeechRequest request) {
-        PlayerEntity player = findPlayer(playerId)
-                .orElseThrow(() -> new BusinessException("PLAYER_NOT_FOUND", "玩家不存在"));
+        operationValidator.requirePhase(roomId, GamePhase.DAY_SPEECH);
+        PlayerEntity player = operationValidator.requirePlayerInRoom(roomId, playerId);
         if (!player.isAlive() || !player.isCanSpeak()) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "当前玩家不能发言");
         }

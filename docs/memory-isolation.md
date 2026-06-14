@@ -18,9 +18,20 @@
 - `buildPublicView(roomId)` 不包含身份真相。
 - `buildPrivateView(roomId, playerId)` 只展示本人身份和本人可见记忆。
 - 狼人私有视角会展示狼队友身份。
-- `buildGodView(roomId)` 只供授权观众或主持人使用。
+- 情侣视角会展示情侣对象，第三方阵营视角会展示同阵营成员。
+- `buildGodView(roomId)` 只供授权观众或主持人使用，REST 调用必须携带 `X-God-View-Token`。
 
 禁止把完整 Entity 或完整 GameState 直接返回给 Controller、前端或 AI。
+
+## 短期记忆
+
+`MemoryEntry` 仍然落 MySQL，作为长期事实和可审计记录。Agent 的短期记忆通过 Redis 保存最近观察，key 形如：
+
+```text
+agent:{roomId}:{playerId}:stm
+```
+
+短期记忆有 TTL，并限制条数；Redis 不可用时降级为 JVM 内存。AI Prompt 只拼接当前 Agent 可见的短期记忆，不会读取其他玩家私有记忆或 GodView。
 
 ## WebSocket
 

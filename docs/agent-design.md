@@ -39,7 +39,17 @@ server/src/main/resources/prompts/roles/
 
 ## 输出格式
 
-AI 发言、投票、夜间行动和白天技能均设计为 JSON。当前 MVP 的 Mock Agent 使用启发式策略直接构建决策对象；真实 LLM 接入时应解析 JSON，非法输出自动 fallback。
+AI 发言、投票、夜间行动和白天技能均使用 JSON。`AiAgentService` 会调用百炼或兼容模型，提取返回文本中的 JSON 对象，校验目标是否合法，再转换为领域决策对象。
+
+非法 JSON、缺失字段、非法目标、狼人投可见狼队友等情况会触发 fallback。Mock LLM 默认返回 JSON，本地和 CI 不需要真实 API Key。
+
+Agent Prompt 会拼接 Redis 中保存的短期记忆：
+
+```text
+agent:{roomId}:{playerId}:stm
+```
+
+短期记忆只来自该 Agent 可见的私有/共享记忆，不包含 GodView。
 
 ## Fallback
 

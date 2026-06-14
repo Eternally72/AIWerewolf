@@ -18,6 +18,9 @@ export async function getDefaults() {
 
 export async function createRoom(payload: unknown) {
   const { data } = await http.post<ApiResponse<Room>>('/api/rooms', payload)
+  if (data.data.godViewToken) {
+    localStorage.setItem(`godViewToken:${data.data.id}`, data.data.godViewToken)
+  }
   return data.data
 }
 
@@ -36,12 +39,20 @@ export async function autoAdvance(roomId: string) {
   return data.data
 }
 
+export async function simulateRoom(roomId: string) {
+  const { data } = await http.post<ApiResponse<Room>>(`/api/rooms/${roomId}/simulate`)
+  return data.data
+}
+
 export async function getPublicView(roomId: string) {
   const { data } = await http.get<ApiResponse<GameView>>(`/api/rooms/${roomId}/public-view`)
   return data.data
 }
 
 export async function getGodView(roomId: string) {
-  const { data } = await http.get<ApiResponse<GameView>>(`/api/rooms/${roomId}/god-view?god=true`)
+  const token = localStorage.getItem(`godViewToken:${roomId}`) ?? ''
+  const { data } = await http.get<ApiResponse<GameView>>(`/api/rooms/${roomId}/god-view`, {
+    headers: { 'X-God-View-Token': token }
+  })
   return data.data
 }

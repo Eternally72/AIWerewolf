@@ -7,7 +7,9 @@ import com.example.aiwerewolf.memory.repository.MemoryEntryRepository;
 import com.example.aiwerewolf.memory.service.MemoryService;
 import com.example.aiwerewolf.player.entity.PlayerEntity;
 import com.example.aiwerewolf.player.repository.PlayerRepository;
+import com.example.aiwerewolf.role.model.LoverRelationEntity;
 import com.example.aiwerewolf.role.model.Role;
+import com.example.aiwerewolf.role.model.LoverRelationRepository;
 import com.example.aiwerewolf.room.repository.RoomRepository;
 import com.example.aiwerewolf.speech.repository.SpeechRepository;
 import com.example.aiwerewolf.vote.repository.VoteRepository;
@@ -27,7 +29,8 @@ class GameViewBuilderTest {
     private final MemoryEntryRepository memoryEntryRepository = mock(MemoryEntryRepository.class);
     private final SpeechRepository speechRepository = mock(SpeechRepository.class);
     private final VoteRepository voteRepository = mock(VoteRepository.class);
-    private final MemoryService memoryService = new MemoryService(memoryEntryRepository);
+    private final LoverRelationRepository loverRelationRepository = mock(LoverRelationRepository.class);
+    private final MemoryService memoryService = mock(MemoryService.class);
     private GameViewBuilder builder;
 
     private final String roomId = "room";
@@ -37,7 +40,7 @@ class GameViewBuilderTest {
 
     @BeforeEach
     void setUp() {
-        builder = new GameViewBuilder(roomRepository, playerRepository, memoryService, memoryEntryRepository, speechRepository, voteRepository);
+        builder = new GameViewBuilder(roomRepository, playerRepository, memoryService, memoryEntryRepository, speechRepository, voteRepository, loverRelationRepository);
         wolf = TestFixtures.player("wolf", roomId, 1, Role.WEREWOLF);
         villager = TestFixtures.player("villager", roomId, 2, Role.VILLAGER);
         seer = TestFixtures.player("seer", roomId, 3, Role.SEER);
@@ -48,6 +51,7 @@ class GameViewBuilderTest {
         when(playerRepository.findById("seer")).thenReturn(Optional.of(seer));
         when(speechRepository.findByRoomIdOrderByCreatedAtAsc(roomId)).thenReturn(List.of());
         when(voteRepository.findByRoomIdOrderByCreatedAtAsc(roomId)).thenReturn(List.of());
+        when(loverRelationRepository.findByRoomId(roomId)).thenReturn(List.of());
     }
 
     @Test
@@ -63,6 +67,7 @@ class GameViewBuilderTest {
     @Test
     void villagerCannotSeeWolfIdentity() {
         when(memoryEntryRepository.findByRoomIdOrderByCreatedAtAsc(roomId)).thenReturn(List.of());
+        when(memoryService.listVisibleMemoriesForPlayer(roomId, "villager")).thenReturn(List.of());
 
         GameView view = builder.buildPrivateView(roomId, "villager");
 
@@ -73,6 +78,7 @@ class GameViewBuilderTest {
     @Test
     void wolfCanSeeWolfIdentityButNotGoodPrivateRoles() {
         when(memoryEntryRepository.findByRoomIdOrderByCreatedAtAsc(roomId)).thenReturn(List.of());
+        when(memoryService.listVisibleMemoriesForPlayer(roomId, "wolf")).thenReturn(List.of());
 
         GameView view = builder.buildPrivateView(roomId, "wolf");
 
@@ -84,7 +90,8 @@ class GameViewBuilderTest {
     void privateMemoryOnlyVisibleToOwnerAndGodViewSeesAll() {
         MemoryEntryEntity publicEntry = TestFixtures.memory("m1", roomId, MemoryScope.PUBLIC, null, "public");
         MemoryEntryEntity privateEntry = TestFixtures.memory("m2", roomId, MemoryScope.PRIVATE, "seer", "check result");
-        when(memoryEntryRepository.findByRoomIdOrderByCreatedAtAsc(roomId)).thenReturn(List.of(publicEntry, privateEntry));
+        when(memoryService.listVisibleMemoriesForPlayer(roomId, "villager")).thenReturn(List.of(publicEntry));
+        when(memoryService.listGodViewMemories(roomId)).thenReturn(List.of(publicEntry, privateEntry));
 
         GameView villagerView = builder.buildPrivateView(roomId, "villager");
         GameView godView = builder.buildGodView(roomId);
@@ -92,5 +99,21 @@ class GameViewBuilderTest {
         assertThat(villagerView.memories()).extracting(MemoryView::content).containsExactly("public");
         assertThat(godView.memories()).extracting(MemoryView::content).contains("public", "check result");
         assertThat(godView.players()).filteredOn(p -> p.id().equals("seer")).first().extracting(PlayerView::role).isEqualTo(Role.SEER);
+    }
+
+    @Test
+    void loverCanSeePartnerIdentity() {
+        LoverRelationEntity relation = new LoverRelationEntity();
+        relation.setRoomId(roomId);
+        relation.setPlayerAId("villager");
+        relation.setPlayerBId("seer");
+        relation.setThirdPartyMode(false);
+        when(loverRelationRepository.findByRoomId(roomId)).thenReturn(List.of(relation));
+        when(memoryService.listVisibleMemoriesForPlayer(roomId, "villager")).thenReturn(List.of());
+
+        GameView view = builder.buildPrivateView(roomId, "villager");
+
+        assertThat(view.players()).filteredOn(p -> p.id().equals("seer")).first().extracting(PlayerView::role).isEqualTo(Role.SEER);
+        assertThat(view.players()).filteredOn(p -> p.id().equals("wolf")).first().extracting(PlayerView::role).isNull();
     }
 }

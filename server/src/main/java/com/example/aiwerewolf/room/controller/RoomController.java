@@ -13,6 +13,7 @@ import com.example.aiwerewolf.room.dto.CreateRoomRequest;
 import com.example.aiwerewolf.room.dto.DefaultConfigResponse;
 import com.example.aiwerewolf.room.dto.RoomResponse;
 import com.example.aiwerewolf.room.service.RoomService;
+import com.example.aiwerewolf.security.GodViewAccessService;
 import com.example.aiwerewolf.speech.service.SpeechRequest;
 import com.example.aiwerewolf.speech.service.SpeechService;
 import com.example.aiwerewolf.vote.service.VoteRequest;
@@ -36,6 +37,7 @@ public class RoomController {
     private final DefaultConfigService defaultConfigService;
     private final RoleCatalogService roleCatalogService;
     private final WebSocketPushService pushService;
+    private final GodViewAccessService godViewAccessService;
 
     public RoomController(RoomService roomService,
                           GamePhaseEngine gamePhaseEngine,
@@ -45,7 +47,8 @@ public class RoomController {
                           com.example.aiwerewolf.action.service.NightActionService nightActionService,
                           DefaultConfigService defaultConfigService,
                           RoleCatalogService roleCatalogService,
-                          WebSocketPushService pushService) {
+                          WebSocketPushService pushService,
+                          GodViewAccessService godViewAccessService) {
         this.roomService = roomService;
         this.gamePhaseEngine = gamePhaseEngine;
         this.gameViewBuilder = gameViewBuilder;
@@ -55,6 +58,7 @@ public class RoomController {
         this.defaultConfigService = defaultConfigService;
         this.roleCatalogService = roleCatalogService;
         this.pushService = pushService;
+        this.godViewAccessService = godViewAccessService;
     }
 
     @PostMapping("/rooms")
@@ -104,6 +108,14 @@ public class RoomController {
         return ok(response);
     }
 
+    @PostMapping("/rooms/{roomId}/simulate")
+    public ApiResponse<RoomResponse> simulate(@PathVariable String roomId) {
+        String safeRoomId = requiredId(roomId, "roomId");
+        RoomResponse response = requireData(roomService.toResponse(gamePhaseEngine.advanceUntilGameOver(safeRoomId)), "room response");
+        pushService.pushPhaseChanged(safeRoomId, response);
+        return ok(response);
+    }
+
     @GetMapping("/rooms/{roomId}/public-view")
     public ApiResponse<GameView> publicView(@PathVariable String roomId) {
         return ok(gameViewBuilder.buildPublicView(requiredId(roomId, "roomId")));
@@ -115,17 +127,16 @@ public class RoomController {
     }
 
     @GetMapping("/rooms/{roomId}/god-view")
-    public ApiResponse<GameView> godView(@PathVariable String roomId, @RequestParam(defaultValue = "false") boolean god) {
-        if (!god) {
-            throw new BusinessException("ACCESS_DENIED", "普通玩家不能访问上帝视角");
-        }
-        return ok(gameViewBuilder.buildGodView(requiredId(roomId, "roomId")));
+    public ApiResponse<GameView> godView(@PathVariable String roomId, @RequestHeader(name = "X-God-View-Token", required = false) String token) {
+        String safeRoomId = requiredId(roomId, "roomId");
+        godViewAccessService.verify(safeRoomId, token);
+        return ok(gameViewBuilder.buildGodView(safeRoomId));
     }
 
     @PostMapping("/rooms/{roomId}/players/{playerId}/speech")
     public ApiResponse<Void> speech(@PathVariable String roomId, @PathVariable String playerId, @Valid @RequestBody SpeechRequest request) {
         String safeRoomId = requiredId(roomId, "roomId");
-        speechService.submitHumanSpeech(safeRoomId, 1, requiredId(playerId, "playerId"), request);
+        speechService.submitHumanSpeech(safeRoomId, roomService.currentRound(safeRoomId), requiredId(playerId, "playerId"), request);
         GameView view = requireData(gameViewBuilder.buildPublicView(safeRoomId), "public view");
         pushService.pushTimelineUpdated(safeRoomId, view);
         return ApiResponse.ok(null);
@@ -134,7 +145,7 @@ public class RoomController {
     @PostMapping("/rooms/{roomId}/players/{playerId}/vote")
     public ApiResponse<Void> vote(@PathVariable String roomId, @PathVariable String playerId, @Valid @RequestBody VoteRequest request) {
         String safeRoomId = requiredId(roomId, "roomId");
-        voteService.submitHumanVote(safeRoomId, 1, requiredId(playerId, "playerId"), request);
+        voteService.submitHumanVote(safeRoomId, roomService.currentRound(safeRoomId), requiredId(playerId, "playerId"), request);
         GameView view = requireData(gameViewBuilder.buildPublicView(safeRoomId), "public view");
         pushService.pushTimelineUpdated(safeRoomId, view);
         return ApiResponse.ok(null);
@@ -142,7 +153,8 @@ public class RoomController {
 
     @PostMapping("/rooms/{roomId}/players/{playerId}/night-action")
     public ApiResponse<Void> nightAction(@PathVariable String roomId, @PathVariable String playerId, @Valid @RequestBody GameActionRequest request) {
-        nightActionService.submitHumanNightAction(requiredId(roomId, "roomId"), 1, requiredId(playerId, "playerId"), request);
+        String safeRoomId = requiredId(roomId, "roomId");
+        nightActionService.submitHumanNightAction(safeRoomId, roomService.currentRound(safeRoomId), requiredId(playerId, "playerId"), request);
         return ApiResponse.ok(null);
     }
 
@@ -162,8 +174,8 @@ public class RoomController {
     }
 
     @GetMapping("/rooms/{roomId}/timeline/god")
-    public ApiResponse<GameView> godTimeline(@PathVariable String roomId, @RequestParam(defaultValue = "false") boolean god) {
-        return godView(roomId, god);
+    public ApiResponse<GameView> godTimeline(@PathVariable String roomId, @RequestHeader(name = "X-God-View-Token", required = false) String token) {
+        return godView(roomId, token);
     }
 
     @GetMapping("/roles")

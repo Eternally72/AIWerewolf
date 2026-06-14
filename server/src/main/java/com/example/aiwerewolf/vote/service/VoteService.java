@@ -3,6 +3,7 @@ package com.example.aiwerewolf.vote.service;
 import com.example.aiwerewolf.agent.core.AiAgentService;
 import com.example.aiwerewolf.agent.dto.AiVoteDecision;
 import com.example.aiwerewolf.common.exception.BusinessException;
+import com.example.aiwerewolf.game.engine.GameOperationValidator;
 import com.example.aiwerewolf.game.phase.GamePhase;
 import com.example.aiwerewolf.game.view.GameViewBuilder;
 import com.example.aiwerewolf.memory.service.MemoryService;
@@ -29,28 +30,32 @@ public class VoteService {
     private final AiAgentService aiAgentService;
     private final GameViewBuilder gameViewBuilder;
     private final MemoryService memoryService;
+    private final GameOperationValidator operationValidator;
 
     public VoteService(VoteRepository voteRepository,
                        PlayerRepository playerRepository,
                        AiAgentService aiAgentService,
                        GameViewBuilder gameViewBuilder,
-                       MemoryService memoryService) {
+                       MemoryService memoryService,
+                       GameOperationValidator operationValidator) {
         this.voteRepository = voteRepository;
         this.playerRepository = playerRepository;
         this.aiAgentService = aiAgentService;
         this.gameViewBuilder = gameViewBuilder;
         this.memoryService = memoryService;
+        this.operationValidator = operationValidator;
     }
 
     public VoteEntity submitHumanVote(String roomId, int round, String playerId, VoteRequest request) {
-        PlayerEntity voter = findPlayer(playerId)
-                .orElseThrow(() -> new BusinessException("PLAYER_NOT_FOUND", "玩家不存在"));
+        operationValidator.requirePhase(roomId, GamePhase.DAY_VOTE);
+        PlayerEntity voter = operationValidator.requirePlayerInRoom(roomId, playerId);
         if (!voter.isAlive() || !voter.isCanVote()) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "当前玩家不能投票");
         }
-        findPlayer(request.targetPlayerId())
-                .filter(PlayerEntity::isAlive)
-                .orElseThrow(() -> new BusinessException("ILLEGAL_TARGET", "投票目标非法"));
+        if (playerId.equals(request.targetPlayerId())) {
+            throw new BusinessException("ILLEGAL_TARGET", "不能投票给自己");
+        }
+        operationValidator.requireAliveTargetInRoom(roomId, request.targetPlayerId());
         return saveVote(roomId, round, playerId, request.targetPlayerId(), request.reason());
     }
 

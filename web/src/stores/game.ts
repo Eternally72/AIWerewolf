@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { autoAdvance, createRoom, getGodView, getPublicView, startRoom } from '../api/client'
+import { autoAdvance, createRoom, getGodView, getPublicView, simulateRoom, startRoom } from '../api/client'
 import type { GameView, Room } from '../types/game'
 
 export const useGameStore = defineStore('game', {
@@ -34,6 +34,10 @@ export const useGameStore = defineStore('game', {
     async auto(roomId: string) {
       this.room = await autoAdvance(roomId)
       await this.loadPublic(roomId)
+    },
+    async simulate(roomId: string) {
+      this.room = await simulateRoom(roomId)
+      await this.loadGod(roomId)
     }
   }
 })

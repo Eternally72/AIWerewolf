@@ -16,7 +16,8 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getCode(), ex.getMessage()));
+        HttpStatus status = "ACCESS_DENIED".equals(ex.getCode()) ? HttpStatus.FORBIDDEN : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(ApiResponse.error(ex.getCode(), ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

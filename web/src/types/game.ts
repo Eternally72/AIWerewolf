@@ -59,6 +59,7 @@ export type Room = {
   totalSeats: number
   humanMode: string
   observerViewMode: string
+  godViewToken?: string | null
 }
 
 export type PlayerView = {
