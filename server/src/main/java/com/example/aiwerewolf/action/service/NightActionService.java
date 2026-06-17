@@ -5,6 +5,9 @@ import com.example.aiwerewolf.action.entity.GameActionEntity;
 import com.example.aiwerewolf.action.repository.GameActionRepository;
 import com.example.aiwerewolf.agent.core.AiAgentService;
 import com.example.aiwerewolf.agent.dto.AiActionDecision;
+import com.example.aiwerewolf.aiinfra.run.AgentRunPurpose;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskRequest;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskService;
 import com.example.aiwerewolf.common.exception.BusinessException;
 import com.example.aiwerewolf.game.engine.GameOperationValidator;
 import com.example.aiwerewolf.game.phase.GamePhase;
@@ -19,6 +22,7 @@ import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.role.ability.RoleAbility;
 import com.example.aiwerewolf.role.model.Role;
 import com.example.aiwerewolf.role.service.RoleAbilityRegistry;
+import com.example.aiwerewolf.game.view.GameView;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +42,7 @@ public class NightActionService {
     private final RoleAbilityRegistry roleAbilityRegistry;
     private final IdempotencyService idempotencyService;
     private final GameOperationValidator operationValidator;
+    private final AgentTaskService agentTaskService;
 
     public NightActionService(PlayerRepository playerRepository,
                               GameActionRepository actionRepository,
@@ -47,7 +52,8 @@ public class NightActionService {
                               MemoryService memoryService,
                               RoleAbilityRegistry roleAbilityRegistry,
                               IdempotencyService idempotencyService,
-                              GameOperationValidator operationValidator) {
+                              GameOperationValidator operationValidator,
+                              AgentTaskService agentTaskService) {
         this.playerRepository = playerRepository;
         this.actionRepository = actionRepository;
         this.gameViewBuilder = gameViewBuilder;
@@ -57,6 +63,7 @@ public class NightActionService {
         this.roleAbilityRegistry = roleAbilityRegistry;
         this.idempotencyService = idempotencyService;
         this.operationValidator = operationValidator;
+        this.agentTaskService = agentTaskService;
     }
 
     public void generateAiNightActions(String roomId, int round) {
@@ -76,12 +83,15 @@ public class NightActionService {
             if (ability.getNightActionType() == ActionType.NONE || phaseFor(ability.getNightActionType()) != phase) {
                 continue;
             }
-            if (!ability.canAct(gameViewBuilder.buildPrivateView(roomId, player.getId()), player)) {
+            GameView privateView = gameViewBuilder.buildPrivateView(roomId, player.getId());
+            if (!ability.canAct(privateView, player)) {
                 continue;
             }
-            AiActionDecision decision = aiAgentService.decideNightAction(player.getId(), gameViewBuilder.buildPrivateView(roomId, player.getId()));
+            AiActionDecision decision = agentTaskService.submitAndAwait(
+                    new AgentTaskRequest(roomId, player.getId(), round, phase, AgentRunPurpose.NIGHT_ACTION),
+                    () -> aiAgentService.decideNightAction(player.getId(), privateView));
             if (decision.actionType() != ActionType.NONE) {
-                if (!ability.validateAction(gameViewBuilder.buildPrivateView(roomId, player.getId()), toAction(roomId, round, player.getId(), decision))) {
+                if (!ability.validateAction(privateView, toAction(roomId, round, player.getId(), decision))) {
                     continue;
                 }
                 if (requiresPrimaryTarget(decision.actionType()) && blank(decision.targetPlayerId())) {
@@ -242,8 +252,17 @@ public class NightActionService {
                 .map(PlayerEntity::getId)
                 .toList();
         if (!wolves.isEmpty()) {
+            String actorName = playerLabel(roomId, actorId);
+            String targetName = targetId == null || targetId.isBlank() ? "未知目标" : playerLabel(roomId, targetId);
             memoryService.appendSharedSecretMemory(roomId, round, phase, MemoryScope.WEREWOLF_TEAM, wolves,
-                    "WEREWOLF_TEAM_ACTION", actorId + " 提议夜间击杀 " + targetId);
+                    "WEREWOLF_TEAM_ACTION", actorName + " 提议夜间击杀 " + targetName);
         }
+    }
+
+    private String playerLabel(String roomId, String playerId) {
+        return playerRepository.findById(playerId)
+                .filter(player -> roomId.equals(player.getRoomId()))
+                .map(player -> player.getSeatNumber() + " 号 " + player.getName())
+                .orElse(playerId);
     }
 }

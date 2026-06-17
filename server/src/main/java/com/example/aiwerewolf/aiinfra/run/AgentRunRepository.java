@@ -1,0 +1,10 @@
+package com.example.aiwerewolf.aiinfra.run;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface AgentRunRepository extends JpaRepository<AgentRunEntity, String> {
+    List<AgentRunEntity> findTop100ByRoomIdOrderByCreatedAtDesc(String roomId);
+    List<AgentRunEntity> findByRoomIdOrderByCreatedAtAsc(String roomId);
+}

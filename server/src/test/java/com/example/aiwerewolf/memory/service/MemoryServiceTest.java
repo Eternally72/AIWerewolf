@@ -1,6 +1,9 @@
 package com.example.aiwerewolf.memory.service;
 
+import com.example.aiwerewolf.aiinfra.context.ContextBudgetPolicy;
+import com.example.aiwerewolf.aiinfra.context.MemoryAccessPolicy;
 import com.example.aiwerewolf.TestFixtures;
+import com.example.aiwerewolf.game.event.GameEventService;
 import com.example.aiwerewolf.memory.entity.MemoryEntryEntity;
 import com.example.aiwerewolf.memory.entity.MemoryScope;
 import com.example.aiwerewolf.memory.repository.MemoryEntryRepository;
@@ -18,7 +21,8 @@ class MemoryServiceTest {
         String roomId = "room";
         MemoryEntryRepository repository = mock(MemoryEntryRepository.class);
         AgentShortTermMemoryService shortTermMemoryService = mock(AgentShortTermMemoryService.class);
-        MemoryService service = new MemoryService(repository, shortTermMemoryService);
+        MemoryService service = new MemoryService(repository, shortTermMemoryService,
+                new MemoryAccessPolicy(), new ContextBudgetPolicy(), mock(GameEventService.class));
 
         MemoryEntryEntity publicMemory = TestFixtures.memory("m1", roomId, MemoryScope.PUBLIC, null, "public");
         MemoryEntryEntity wolfMemory = TestFixtures.memory("m2", roomId, MemoryScope.WEREWOLF_TEAM, null, "wolf secret");

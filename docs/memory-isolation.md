@@ -11,6 +11,25 @@
 - `THIRD_PARTY_TEAM`：第三方阵营内部信息。
 - `GOD_VIEW`：完整身份、行动、死亡原因和策略摘要。
 
+## Context Infra
+
+信息隔离由 `aiinfra/context` 统一承载：
+
+- `MemoryAccessPolicy`：判断某个玩家是否可以看到某条记忆、某个目标玩家的真实身份。
+- `ContextAssembler`：按房间和视角组装玩家列表、记忆列表。
+- `ContextBudgetPolicy`：限制进入上下文的记忆数量，当前保留最近 200 条可见记忆，避免 Prompt 上下文无限增长。
+
+核心规则：
+
+- `PUBLIC` 记忆所有视角可见。
+- `PRIVATE` 记忆仅 `ownerPlayerId` 可见。
+- `WEREWOLF_TEAM`、`LOVERS`、`THIRD_PARTY_TEAM` 仅 `visibleToPlayerIds` 中的玩家可见。
+- `GOD_VIEW` 只允许 GodView 查询，不会进入普通玩家或 AI Agent 视角。
+- 玩家只能看到自己的真实身份。
+- 狼人能看到狼队友身份。
+- 情侣能看到彼此身份。
+- 第三方阵营成员能看到同阵营成员身份。
+
 ## GameViewBuilder
 
 普通前端和 AI Agent 都只能读取 `GameViewBuilder` 输出：

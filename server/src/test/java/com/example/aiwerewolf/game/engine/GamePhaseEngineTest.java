@@ -1,5 +1,6 @@
 package com.example.aiwerewolf.game.engine;
 
+import com.example.aiwerewolf.aiinfra.observability.AiInfraMetrics;
 import com.example.aiwerewolf.TestFixtures;
 import com.example.aiwerewolf.action.service.DeathResolutionService;
 import com.example.aiwerewolf.action.service.NightActionService;
@@ -16,6 +17,7 @@ import com.example.aiwerewolf.room.entity.RoomEntity;
 import com.example.aiwerewolf.room.repository.RoomRepository;
 import com.example.aiwerewolf.speech.service.SpeechService;
 import com.example.aiwerewolf.vote.service.VoteService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -43,7 +45,8 @@ class GamePhaseEngineTest {
                 mock(MemoryService.class),
                 mock(PhaseAdvanceLockService.class),
                 mock(IdempotencyService.class),
-                mock(GameRuntimeStateCache.class)
+                mock(GameRuntimeStateCache.class),
+                new AiInfraMetrics(new SimpleMeterRegistry())
         );
 
         assertThat(engine.validatePhaseTransition(GamePhase.FIRST_NIGHT, GamePhase.GUARD_ACTION)).isTrue();
@@ -88,7 +91,8 @@ class GamePhaseEngineTest {
                 mock(MemoryService.class),
                 lockService,
                 idempotencyService,
-                mock(GameRuntimeStateCache.class)
+                mock(GameRuntimeStateCache.class),
+                new AiInfraMetrics(new SimpleMeterRegistry())
         );
 
         RoomEntity result = engine.advanceUntilHumanInputRequired(roomId);

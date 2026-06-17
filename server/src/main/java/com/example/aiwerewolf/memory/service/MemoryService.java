@@ -1,5 +1,8 @@
 package com.example.aiwerewolf.memory.service;
 
+import com.example.aiwerewolf.aiinfra.context.ContextBudgetPolicy;
+import com.example.aiwerewolf.aiinfra.context.MemoryAccessPolicy;
+import com.example.aiwerewolf.game.event.GameEventService;
 import com.example.aiwerewolf.game.phase.GamePhase;
 import com.example.aiwerewolf.memory.entity.MemoryEntryEntity;
 import com.example.aiwerewolf.memory.entity.MemoryScope;
@@ -12,10 +15,20 @@ import java.util.List;
 public class MemoryService {
     private final MemoryEntryRepository memoryEntryRepository;
     private final AgentShortTermMemoryService shortTermMemoryService;
+    private final MemoryAccessPolicy memoryAccessPolicy;
+    private final ContextBudgetPolicy contextBudgetPolicy;
+    private final GameEventService gameEventService;
 
-    public MemoryService(MemoryEntryRepository memoryEntryRepository, AgentShortTermMemoryService shortTermMemoryService) {
+    public MemoryService(MemoryEntryRepository memoryEntryRepository,
+                         AgentShortTermMemoryService shortTermMemoryService,
+                         MemoryAccessPolicy memoryAccessPolicy,
+                         ContextBudgetPolicy contextBudgetPolicy,
+                         GameEventService gameEventService) {
         this.memoryEntryRepository = memoryEntryRepository;
         this.shortTermMemoryService = shortTermMemoryService;
+        this.memoryAccessPolicy = memoryAccessPolicy;
+        this.contextBudgetPolicy = contextBudgetPolicy;
+        this.gameEventService = gameEventService;
     }
 
     public MemoryEntryEntity appendPublicMemory(String roomId, int round, GamePhase phase, String type, String content) {
@@ -40,11 +53,10 @@ public class MemoryService {
     }
 
     public List<MemoryEntryEntity> listVisibleMemoriesForPlayer(String roomId, String playerId) {
-        return memoryEntryRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream()
-                .filter(entry -> entry.getScope() == MemoryScope.PUBLIC
-                        || playerId.equals(entry.getOwnerPlayerId())
-                        || visibleTo(entry, playerId))
+        List<MemoryEntryEntity> visible = memoryEntryRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream()
+                .filter(entry -> memoryAccessPolicy.canViewMemory(entry, playerId, false))
                 .toList();
+        return contextBudgetPolicy.fitVisibleMemories(visible);
     }
 
     public List<MemoryEntryEntity> listGodViewMemories(String roomId) {
@@ -63,11 +75,9 @@ public class MemoryService {
         entry.setEventType(type);
         entry.setContent(content);
         entry.setMetadataJson(metadataJson);
-        return memoryEntryRepository.save(entry);
+        MemoryEntryEntity saved = memoryEntryRepository.save(entry);
+        gameEventService.appendMemoryEvent(roomId, round, phase, scope, owner, visibleTo, type, content, metadataJson);
+        return saved;
     }
 
-    private boolean visibleTo(MemoryEntryEntity entry, String playerId) {
-        String ids = entry.getVisibleToPlayerIds();
-        return ids != null && List.of(ids.split(",")).contains(playerId);
-    }
 }

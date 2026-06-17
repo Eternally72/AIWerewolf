@@ -1,21 +1,17 @@
 package com.example.aiwerewolf.game.view;
 
+import com.example.aiwerewolf.aiinfra.context.ContextAssembler;
 import com.example.aiwerewolf.common.exception.BusinessException;
-import com.example.aiwerewolf.memory.entity.MemoryScope;
-import com.example.aiwerewolf.memory.repository.MemoryEntryRepository;
-import com.example.aiwerewolf.memory.service.MemoryService;
 import com.example.aiwerewolf.player.entity.PlayerEntity;
 import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.room.entity.ObserverViewMode;
 import com.example.aiwerewolf.room.entity.RoomEntity;
+import com.example.aiwerewolf.room.entity.RoomStatus;
 import com.example.aiwerewolf.room.repository.RoomRepository;
-import com.example.aiwerewolf.role.model.Camp;
-import com.example.aiwerewolf.role.model.LoverRelationRepository;
 import com.example.aiwerewolf.speech.repository.SpeechRepository;
 import com.example.aiwerewolf.vote.repository.VoteRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -23,26 +19,20 @@ import java.util.Optional;
 public class GameViewBuilder {
     private final RoomRepository roomRepository;
     private final PlayerRepository playerRepository;
-    private final MemoryService memoryService;
-    private final MemoryEntryRepository memoryEntryRepository;
+    private final ContextAssembler contextAssembler;
     private final SpeechRepository speechRepository;
     private final VoteRepository voteRepository;
-    private final LoverRelationRepository loverRelationRepository;
 
     public GameViewBuilder(RoomRepository roomRepository,
                            PlayerRepository playerRepository,
-                           MemoryService memoryService,
-                           MemoryEntryRepository memoryEntryRepository,
+                           ContextAssembler contextAssembler,
                            SpeechRepository speechRepository,
-                           VoteRepository voteRepository,
-                           LoverRelationRepository loverRelationRepository) {
+                           VoteRepository voteRepository) {
         this.roomRepository = roomRepository;
         this.playerRepository = playerRepository;
-        this.memoryService = memoryService;
-        this.memoryEntryRepository = memoryEntryRepository;
+        this.contextAssembler = contextAssembler;
         this.speechRepository = speechRepository;
         this.voteRepository = voteRepository;
-        this.loverRelationRepository = loverRelationRepository;
     }
 
     public GameView buildPublicView(String roomId) {
@@ -56,8 +46,10 @@ public class GameViewBuilder {
                 null,
                 null,
                 null,
-                playerRepository.findByRoomIdOrderBySeatNumberAsc(roomId).stream().map(PlayerView::publicOf).toList(),
-                memoryEntryRepository.findByRoomIdAndScopeOrderByCreatedAtAsc(roomId, MemoryScope.PUBLIC).stream().map(MemoryView::of).toList(),
+                room.getStatus() == RoomStatus.GAME_OVER
+                        ? contextAssembler.revealedPlayers(roomId)
+                        : contextAssembler.publicPlayers(roomId),
+                contextAssembler.publicMemories(roomId).stream().map(MemoryView::of).toList(),
                 speechRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().filter(s -> s.isPublicVisible()).map(SpeechView::of).toList(),
                 voteRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().map(VoteView::of).toList(),
                 false
@@ -78,8 +70,8 @@ public class GameViewBuilder {
                 playerId,
                 viewer.getRole(),
                 viewer.getCamp(),
-                privatePlayers(roomId, viewer),
-                memoryService.listVisibleMemoriesForPlayer(roomId, playerId).stream().map(MemoryView::of).toList(),
+                contextAssembler.privatePlayers(roomId, viewer),
+                contextAssembler.visibleMemoriesForPlayer(roomId, playerId).stream().map(MemoryView::of).toList(),
                 speechRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().filter(s -> s.isPublicVisible()).map(SpeechView::of).toList(),
                 voteRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().map(VoteView::of).toList(),
                 false
@@ -87,11 +79,7 @@ public class GameViewBuilder {
     }
 
     public GameView buildWerewolfTeamView(String roomId, String playerId) {
-        GameView privateView = buildPrivateView(roomId, playerId);
-        if (privateView.ownCamp() != Camp.WEREWOLF) {
-            return privateView;
-        }
-        return privateView;
+        return buildPrivateView(roomId, playerId);
     }
 
     public GameView buildGodView(String roomId) {
@@ -105,8 +93,8 @@ public class GameViewBuilder {
                 null,
                 null,
                 null,
-                playerRepository.findByRoomIdOrderBySeatNumberAsc(roomId).stream().map(PlayerView::fullOf).toList(),
-                memoryService.listGodViewMemories(roomId).stream().map(MemoryView::of).toList(),
+                contextAssembler.godPlayers(roomId),
+                contextAssembler.godMemories(roomId).stream().map(MemoryView::of).toList(),
                 speechRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().map(SpeechView::of).toList(),
                 voteRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().map(VoteView::of).toList(),
                 true
@@ -115,31 +103,6 @@ public class GameViewBuilder {
 
     public GameView buildObserverView(String roomId, ObserverViewMode mode) {
         return mode == ObserverViewMode.GOD_VIEW ? buildGodView(roomId) : buildPublicView(roomId);
-    }
-
-    private List<PlayerView> privatePlayers(String roomId, PlayerEntity viewer) {
-        boolean wolf = viewer.getRole() != null && viewer.getRole().isWerewolfCamp();
-        List<String> loverIds = loverIds(roomId, viewer.getId());
-        boolean thirdParty = viewer.getCamp() == Camp.THIRD_PARTY;
-        return playerRepository.findByRoomIdOrderBySeatNumberAsc(roomId).stream()
-                .map(player -> {
-                    boolean self = player.getId().equals(viewer.getId());
-                    boolean wolfMate = wolf && player.getRole() != null && player.getRole().isWerewolfCamp();
-                    boolean lover = loverIds.contains(player.getId());
-                    boolean thirdPartyMate = thirdParty && player.getCamp() == Camp.THIRD_PARTY;
-                    if (self || wolfMate || lover || thirdPartyMate) {
-                        return PlayerView.fullOf(player);
-                    }
-                    return PlayerView.publicOf(player);
-                })
-                .toList();
-    }
-
-    private List<String> loverIds(String roomId, String viewerId) {
-        return loverRelationRepository.findByRoomId(roomId).stream()
-                .filter(relation -> relation.getPlayerAId().equals(viewerId) || relation.getPlayerBId().equals(viewerId))
-                .map(relation -> relation.getPlayerAId().equals(viewerId) ? relation.getPlayerBId() : relation.getPlayerAId())
-                .toList();
     }
 
     private Optional<PlayerEntity> findPlayer(String playerId) {

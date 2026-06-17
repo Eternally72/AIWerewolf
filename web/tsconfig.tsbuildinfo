@@ -1,1 +1,0 @@
-{"root":["./src/env.d.ts","./src/main.ts","./src/api/client.ts","./src/router/index.ts","./src/stores/game.ts","./src/types/game.ts","./src/websocket/gameSocket.ts","./src/App.vue","./src/pages/CreateRoomPage.vue","./src/pages/GameOverPage.vue","./src/pages/GamePage.vue","./src/pages/GodViewPage.vue","./src/pages/HomePage.vue","./src/pages/LobbyPage.vue"],"version":"5.9.3"}

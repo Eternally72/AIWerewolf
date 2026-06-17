@@ -30,9 +30,24 @@ select {
   font: inherit;
 }
 
+select,
+select option,
+select optgroup {
+  color: #f8fbff !important;
+  background-color: #202331 !important;
+  color-scheme: dark;
+}
+
+select:focus,
+input:focus,
+textarea:focus {
+  outline: 2px solid rgba(196, 181, 253, 0.48);
+  outline-offset: 2px;
+}
+
 .page {
   min-height: 100vh;
-  padding: 28px;
+  padding: clamp(12px, 1.5vw, 28px);
 }
 
 .shell {
@@ -42,9 +57,13 @@ select {
 
 .glass {
   border: 1px solid rgba(220, 230, 255, 0.16);
-  background: rgba(10, 14, 28, 0.72);
-  backdrop-filter: blur(18px);
+  background: rgba(10, 14, 28, 0.76);
+  backdrop-filter: blur(10px);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+}
+
+.game-page .glass {
+  backdrop-filter: none;
 }
 
 .btn {
@@ -83,7 +102,8 @@ select {
   border-radius: 8px;
   padding: 0 12px;
   color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(31, 35, 49, 0.92);
+  color-scheme: dark;
 }
 
 .label {
@@ -93,46 +113,43 @@ select {
   font-size: 13px;
 }
 
-.seat-ring {
-  position: relative;
-  min-height: 560px;
-  border-radius: 12px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle, rgba(136, 92, 35, 0.5) 0 26%, transparent 27%),
-    radial-gradient(circle, rgba(255, 255, 255, 0.08) 0 37%, transparent 38%),
-    linear-gradient(145deg, rgba(18, 24, 42, 0.88), rgba(19, 9, 25, 0.9));
-}
-
 .seat {
-  width: 116px;
-  min-height: 132px;
-  padding: 12px;
+  z-index: 2;
+  width: clamp(96px, 7.2vw, 126px);
+  min-height: clamp(112px, 8vw, 138px);
+  padding: clamp(9px, 0.7vw, 12px);
   border-radius: 8px;
   border: 1px solid rgba(211, 224, 255, 0.16);
-  background: rgba(5, 8, 18, 0.68);
+  background: rgba(5, 8, 18, 0.78);
   text-align: center;
-}
-
-.seat.dead {
-  filter: grayscale(1);
-  opacity: 0.48;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+  will-change: transform;
 }
 
 .avatar {
-  width: 52px;
-  height: 52px;
+  width: clamp(44px, 3.3vw, 56px);
+  height: clamp(44px, 3.3vw, 56px);
   margin: 0 auto 8px;
   border-radius: 999px;
   display: grid;
   place-items: center;
   background: linear-gradient(135deg, #cbd5e1, #4338ca 46%, #7f1d1d);
   font-weight: 800;
+  overflow: hidden;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .timeline {
-  max-height: 420px;
+  max-height: min(420px, 32vh);
   overflow: auto;
+  scrollbar-color: #8b8fa3 rgba(255, 255, 255, 0.08);
+  content-visibility: auto;
+  contain-intrinsic-size: 420px;
 }
 
 .timeline-item {
@@ -140,4 +157,19 @@ select {
   padding: 10px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.07);
+}
+
+.memory-meta {
+  display: block;
+  margin-bottom: 5px;
+  color: #9ca8c7;
+  font-size: 12px;
+}
+
+.empty {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  color: #9ca8c7;
+  background: rgba(255, 255, 255, 0.05);
 }

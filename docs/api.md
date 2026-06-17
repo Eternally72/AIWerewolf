@@ -23,6 +23,8 @@
 - `GET /api/rooms/{roomId}/public-view`
 - `GET /api/rooms/{roomId}/players/{playerId}/private-view`
 - `GET /api/rooms/{roomId}/god-view`
+- `GET /api/rooms/{roomId}/agent-runs` 查询最近 100 条 AI 决策运行记录，需要 GodView 令牌。
+- `GET /api/rooms/{roomId}/agent-tasks` 查询最近 100 条 AI Worker 任务状态，需要 GodView 令牌。
 
 GodView 必须携带创建房间时返回的主持人令牌：
 
@@ -46,11 +48,56 @@ X-God-View-Token: <godViewToken>
 - `GET /api/rooms/{roomId}/timeline/public`
 - `GET /api/rooms/{roomId}/timeline/private/{playerId}`
 - `GET /api/rooms/{roomId}/timeline/god`，同样需要 `X-God-View-Token`。
+- `GET /api/rooms/{roomId}/replay/public` 查询公开事件回放。
+- `GET /api/rooms/{roomId}/replay/god` 查询完整事件回放，需要 `X-God-View-Token`。
+
+事件回放响应示例：
+
+```json
+{
+  "id": "event-id",
+  "roomId": "room-id",
+  "roundNumber": 1,
+  "phase": "DAY_SPEECH",
+  "eventType": "SPEECH",
+  "payloadJson": "{\"content\":\"玩家发言\"}",
+  "scope": "PUBLIC",
+  "createdAt": "2026-06-14T12:00:00Z"
+}
+```
 
 ## 配置
 
 - `GET /api/roles`
 - `GET /api/default-configs`
+
+## AI Infra Evaluation
+
+- `POST /api/evaluations/run`
+
+运行批量自动对局评测。该接口仅在 `dev/test` profile 暴露；当前支持 `7-standard` 模板，`gameCount` 范围为 1 到 20，未传时默认 1。
+
+请求示例：
+
+```json
+{"gameCount":1,"templateId":"7-standard"}
+```
+
+响应会包含完整结束率、失败局数、AgentRun 数、fallback 次数、fallback 率、非法决策 fallback 次数、公共视角泄露计数、平均延迟和平均轮次。
+
+## Actuator
+
+后端接入 Actuator/Micrometer 后，可以通过以下端点查看运行状态和 AI Infra 指标：
+
+- `GET /actuator/health`
+- `GET /actuator/metrics`
+- `GET /actuator/metrics/aiwerewolf.llm.calls`
+- `GET /actuator/metrics/aiwerewolf.agent.runs`
+- `GET /actuator/metrics/aiwerewolf.agent.tasks`
+- `GET /actuator/metrics/aiwerewolf.game.phase.advances`
+- `GET /actuator/prometheus`
+
+这些端点用于观测模型调用、fallback、AgentRun、阶段推进和评测结果，不返回玩家私有视角、GodView、原始 Prompt 或模型密钥。
 
 错误示例：
 

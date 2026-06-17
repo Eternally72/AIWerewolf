@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ApiResponse, GameView, Room } from '../types/game'
+import type { AgentRun, AgentTask, ApiResponse, GameEvent, GameView, Room } from '../types/game'
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080',
@@ -49,9 +49,67 @@ export async function getPublicView(roomId: string) {
   return data.data
 }
 
+export async function getPrivateView(roomId: string, playerId: string) {
+  const { data } = await http.get<ApiResponse<GameView>>(`/api/rooms/${roomId}/players/${playerId}/private-view`)
+  return data.data
+}
+
 export async function getGodView(roomId: string) {
   const token = localStorage.getItem(`godViewToken:${roomId}`) ?? ''
   const { data } = await http.get<ApiResponse<GameView>>(`/api/rooms/${roomId}/god-view`, {
+    headers: { 'X-God-View-Token': token }
+  })
+  return data.data
+}
+
+export async function submitSpeech(roomId: string, playerId: string, content: string, claimedRole: string | null) {
+  await http.post<ApiResponse<null>>(`/api/rooms/${roomId}/players/${playerId}/speech`, { content, claimedRole })
+}
+
+export async function submitVote(roomId: string, playerId: string, targetPlayerId: string, reason: string) {
+  await http.post<ApiResponse<null>>(`/api/rooms/${roomId}/players/${playerId}/vote`, { targetPlayerId, reason })
+}
+
+export async function submitNightAction(
+  roomId: string,
+  playerId: string,
+  actionType: string,
+  targetPlayerId: string | null,
+  secondaryTargetPlayerId: string | null,
+  reason: string
+) {
+  await http.post<ApiResponse<null>>(`/api/rooms/${roomId}/players/${playerId}/night-action`, {
+    actionType,
+    targetPlayerId,
+    secondaryTargetPlayerId,
+    reason
+  })
+}
+
+export async function getAgentRuns(roomId: string) {
+  const token = localStorage.getItem(`godViewToken:${roomId}`) ?? ''
+  const { data } = await http.get<ApiResponse<AgentRun[]>>(`/api/rooms/${roomId}/agent-runs`, {
+    headers: { 'X-God-View-Token': token }
+  })
+  return data.data
+}
+
+export async function getAgentTasks(roomId: string) {
+  const token = localStorage.getItem(`godViewToken:${roomId}`) ?? ''
+  const { data } = await http.get<ApiResponse<AgentTask[]>>(`/api/rooms/${roomId}/agent-tasks`, {
+    headers: { 'X-God-View-Token': token }
+  })
+  return data.data
+}
+
+export async function getPublicReplay(roomId: string) {
+  const { data } = await http.get<ApiResponse<GameEvent[]>>(`/api/rooms/${roomId}/replay/public`)
+  return data.data
+}
+
+export async function getGodReplay(roomId: string) {
+  const token = localStorage.getItem(`godViewToken:${roomId}`) ?? ''
+  const { data } = await http.get<ApiResponse<GameEvent[]>>(`/api/rooms/${roomId}/replay/god`, {
     headers: { 'X-God-View-Token': token }
   })
   return data.data

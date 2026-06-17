@@ -1,5 +1,6 @@
 package com.example.aiwerewolf.game.engine;
 
+import com.example.aiwerewolf.aiinfra.observability.AiInfraMetrics;
 import com.example.aiwerewolf.action.service.DeathResolutionService;
 import com.example.aiwerewolf.action.service.NightActionService;
 import com.example.aiwerewolf.common.exception.BusinessException;
@@ -42,6 +43,7 @@ public class GamePhaseEngine {
     private final PhaseAdvanceLockService phaseAdvanceLockService;
     private final IdempotencyService idempotencyService;
     private final GameRuntimeStateCache runtimeStateCache;
+    private final AiInfraMetrics metrics;
 
     public GamePhaseEngine(RoomRepository roomRepository,
                            PlayerRepository playerRepository,
@@ -53,7 +55,8 @@ public class GamePhaseEngine {
                            MemoryService memoryService,
                            PhaseAdvanceLockService phaseAdvanceLockService,
                            IdempotencyService idempotencyService,
-                           GameRuntimeStateCache runtimeStateCache) {
+                           GameRuntimeStateCache runtimeStateCache,
+                           AiInfraMetrics metrics) {
         this.roomRepository = roomRepository;
         this.playerRepository = playerRepository;
         this.nightActionService = nightActionService;
@@ -65,12 +68,22 @@ public class GamePhaseEngine {
         this.phaseAdvanceLockService = phaseAdvanceLockService;
         this.idempotencyService = idempotencyService;
         this.runtimeStateCache = runtimeStateCache;
+        this.metrics = metrics;
     }
 
     @Transactional
     public RoomEntity advancePhase(String roomId) {
         String safeRoomId = Objects.requireNonNull(roomId, "roomId must not be null");
-        return phaseAdvanceLockService.withRoomLock(safeRoomId, () -> advancePhaseLocked(safeRoomId));
+        long startedAt = System.nanoTime();
+        String phase = currentPhaseName(safeRoomId);
+        try {
+            RoomEntity result = phaseAdvanceLockService.withRoomLock(safeRoomId, () -> advancePhaseLocked(safeRoomId));
+            metrics.recordPhaseAdvance(phase, "success", elapsedMillis(startedAt));
+            return result;
+        } catch (RuntimeException ex) {
+            metrics.recordPhaseAdvance(phase, "failure", elapsedMillis(startedAt));
+            throw ex;
+        }
     }
 
     private RoomEntity advancePhaseLocked(String safeRoomId) {
@@ -210,5 +223,16 @@ public class GamePhaseEngine {
     private RoomEntity room(String roomId) {
         return roomRepository.findById(Objects.requireNonNull(roomId, "roomId must not be null"))
                 .orElseThrow(() -> new BusinessException("ROOM_NOT_FOUND", "房间不存在"));
+    }
+
+    private String currentPhaseName(String roomId) {
+        return roomRepository.findById(roomId)
+                .map(RoomEntity::getPhase)
+                .map(Enum::name)
+                .orElse("unknown");
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
     }
 }

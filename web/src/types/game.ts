@@ -99,3 +99,51 @@ export type GameView = {
   votes: { voterPlayerId: string; targetPlayerId: string; reason: string; createdAt: string }[]
   godView: boolean
 }
+
+export type AgentRun = {
+  id: string
+  roomId: string
+  playerId: string
+  agentId: string
+  roundNumber: number
+  phase: string
+  purpose: string
+  status: string
+  fallbackUsed: boolean
+  attemptCount: number
+  latencyMillis: number
+  promptVersion: string
+  taskPromptVersion: string
+  modelProvider: string
+  modelName: string | null
+  rawOutput: string | null
+  parsedOutputJson: string | null
+  errorMessage: string | null
+  createdAt: string
+}
+
+export type AgentTask = {
+  taskId: string
+  roomId: string
+  playerId: string
+  roundNumber: number
+  phase: string
+  purpose: string
+  status: string
+  queuedAt: string
+  startedAt: string | null
+  completedAt: string | null
+  latencyMillis: number
+  errorMessage: string | null
+}
+
+export type GameEvent = {
+  id: string
+  roomId: string
+  roundNumber: number
+  phase: string
+  eventType: string
+  payloadJson: string
+  scope: string
+  createdAt: string
+}

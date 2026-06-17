@@ -2,6 +2,9 @@ package com.example.aiwerewolf.speech.service;
 
 import com.example.aiwerewolf.agent.core.AiAgentService;
 import com.example.aiwerewolf.agent.dto.AiSpeechDecision;
+import com.example.aiwerewolf.aiinfra.run.AgentRunPurpose;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskRequest;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskService;
 import com.example.aiwerewolf.common.exception.BusinessException;
 import com.example.aiwerewolf.game.engine.GameOperationValidator;
 import com.example.aiwerewolf.game.phase.GamePhase;
@@ -17,8 +20,6 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 
 @Service
 public class SpeechService {
@@ -28,19 +29,22 @@ public class SpeechService {
     private final GameViewBuilder gameViewBuilder;
     private final MemoryService memoryService;
     private final GameOperationValidator operationValidator;
+    private final AgentTaskService agentTaskService;
 
     public SpeechService(SpeechRepository speechRepository,
                          PlayerRepository playerRepository,
                          AiAgentService aiAgentService,
                          GameViewBuilder gameViewBuilder,
                          MemoryService memoryService,
-                         GameOperationValidator operationValidator) {
+                         GameOperationValidator operationValidator,
+                         AgentTaskService agentTaskService) {
         this.speechRepository = speechRepository;
         this.playerRepository = playerRepository;
         this.aiAgentService = aiAgentService;
         this.gameViewBuilder = gameViewBuilder;
         this.memoryService = memoryService;
         this.operationValidator = operationValidator;
+        this.agentTaskService = agentTaskService;
     }
 
     public SpeechEntity submitHumanSpeech(String roomId, int round, String playerId, SpeechRequest request) {
@@ -57,7 +61,9 @@ public class SpeechService {
             if (player.getType() != PlayerType.AI) {
                 continue;
             }
-            AiSpeechDecision decision = aiAgentService.generateSpeech(player.getId(), gameViewBuilder.buildPrivateView(roomId, player.getId()));
+            AiSpeechDecision decision = agentTaskService.submitAndAwait(
+                    new AgentTaskRequest(roomId, player.getId(), round, GamePhase.DAY_SPEECH, AgentRunPurpose.SPEECH),
+                    () -> aiAgentService.generateSpeech(player.getId(), gameViewBuilder.buildPrivateView(roomId, player.getId())));
             saveSpeech(roomId, round, player.getId(), decision.speech(), parseRole(decision.claimedRole()));
             memoryService.appendPrivateMemory(roomId, round, GamePhase.DAY_SPEECH, player.getId(),
                     "AI_STRATEGY", decision.strategySummary());
@@ -79,9 +85,17 @@ public class SpeechService {
                     speech.setClaimedRole(claimedRole);
                     speech.setPublicVisible(true);
                     SpeechEntity saved = speechRepository.save(speech);
-                    memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_SPEECH, "SPEECH", "玩家发言：" + content);
+                    memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_SPEECH, "SPEECH",
+                            playerLabel(roomId, playerId) + " 发言：" + content);
                     return saved;
                 });
+    }
+
+    private String playerLabel(String roomId, String playerId) {
+        return playerRepository.findById(playerId)
+                .filter(player -> roomId.equals(player.getRoomId()))
+                .map(player -> player.getSeatNumber() + " 号 " + player.getName())
+                .orElse(playerId);
     }
 
     @Nullable
@@ -97,7 +111,4 @@ public class SpeechService {
         return null;
     }
 
-    private Optional<PlayerEntity> findPlayer(String playerId) {
-        return playerRepository.findById(Objects.requireNonNull(playerId, "playerId must not be null"));
-    }
 }

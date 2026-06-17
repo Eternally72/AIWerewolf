@@ -15,6 +15,8 @@ AI Werewolf 是一个 Java 21 + Spring Boot + Vue 3 的多 Agent 狼人杀项目
 - 信息隔离：所有外部输出由 `GameViewBuilder` 构建，禁止把完整真相直接给普通玩家或 AI。
 - 角色 Prompt：每个角色都有独立系统提示词，位于 `server/src/main/resources/prompts/roles/`。
 - 实时游戏：REST 恢复状态，WebSocket/STOMP 推送阶段、时间线和公共事件。
+- AI Infra：多模型网关支持 Mock、百炼、DeepSeek、智谱和通用 OpenAI-compatible Provider；`AgentRun` 记录模型输入输出和 fallback，`AgentTask` 持久化 Worker 任务状态，`GameEvent` 支持公开和 GodView 回放。
+- 前端操作：游戏桌支持玩家发言、投票、夜间行动；GodView 展示身份、AgentRun、AgentTask 和事件回放。
 - 可开源：默认 Mock LLM，真实密钥只从环境变量读取。
 - 可扩展：角色能力接口、状态机、记忆作用域和默认模板均可继续扩展。
 
@@ -38,7 +40,7 @@ flowchart LR
   Room --> Engine[GamePhaseEngine]
   Engine --> Action[Night/Day/Vote/Death Services]
   Engine --> Agent[AiAgentService]
-  Agent --> LLM[LlmClient: Mock/Alibaba Bailian]
+  Agent --> Gateway[LlmGateway: Mock/Bailian/DeepSeek/Zhipu/OpenAI-compatible]
   Action --> Memory[MemoryService]
   View --> Memory
   Engine --> Redis[(Redis: runtime/lock/idempotency/STM)]
@@ -71,13 +73,42 @@ npm run dev
 
 请不要将 .env、application-local.yml、application-prod.yml、真实数据库密码、真实 LLM API Key、Token 或任何本地私有配置提交到 GitHub。项目已提供 .env.example 和 application-*.example.yml 作为模板配置文件。
 
-默认 `LLM_PROVIDER=mock`，未配置真实 API Key 也可以运行。启用阿里百炼真实 LLM 时设置：
+默认 `LLM_PROVIDER=mock`，未配置真实 API Key 也可以运行。真实模型统一走后端 `LlmGateway`，前端不会直接接触模型 API Key。
+
+启用阿里百炼：
 
 ```env
 LLM_PROVIDER=bailian
 BAILIAN_API_KEY=your_key
 BAILIAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 BAILIAN_MODEL=qwen-plus
+```
+
+启用 DeepSeek：
+
+```env
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+启用智谱：
+
+```env
+LLM_PROVIDER=zhipu
+ZHIPU_API_KEY=your_key
+ZHIPU_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+ZHIPU_MODEL=glm-4-flash
+```
+
+接入其他 OpenAI-compatible 平台：
+
+```env
+LLM_PROVIDER=openai-compatible
+OPENAI_COMPATIBLE_API_KEY=your_key
+OPENAI_COMPATIBLE_BASE_URL=https://api.example.com/v1
+OPENAI_COMPATIBLE_MODEL=your-model
 ```
 
 ## API 示例
@@ -115,6 +146,7 @@ CI 默认使用 Mock LLM，不依赖真实密钥。
 - 多真人联机权限系统。
 - 更完整的复杂角色结算。
 - 回放系统和对局报告。
+- Redis Stream / MQ 式 Agent Worker 投递层。
 - 排行榜和 Agent 个性编辑器。
 - 移动端深度适配。
 

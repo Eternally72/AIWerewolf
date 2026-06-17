@@ -1,6 +1,15 @@
 package com.example.aiwerewolf.room.controller;
 
 import com.example.aiwerewolf.game.engine.GamePhaseEngine;
+import com.example.aiwerewolf.aiinfra.run.AgentRunPurpose;
+import com.example.aiwerewolf.aiinfra.run.AgentRunResponse;
+import com.example.aiwerewolf.aiinfra.run.AgentRunService;
+import com.example.aiwerewolf.aiinfra.run.AgentRunStatus;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskService;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskSnapshot;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskStatus;
+import com.example.aiwerewolf.game.event.GameEventResponse;
+import com.example.aiwerewolf.game.event.GameEventService;
 import com.example.aiwerewolf.game.phase.GamePhase;
 import com.example.aiwerewolf.game.view.GameView;
 import com.example.aiwerewolf.game.view.GameViewBuilder;
@@ -20,6 +29,7 @@ import com.example.aiwerewolf.security.GodViewAccessService;
 import com.example.aiwerewolf.speech.service.SpeechService;
 import com.example.aiwerewolf.vote.service.VoteService;
 import com.example.aiwerewolf.websocket.WebSocketPushService;
+import com.example.aiwerewolf.memory.entity.MemoryScope;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -64,6 +74,12 @@ class RoomControllerApiTest {
     private WebSocketPushService pushService;
     @MockitoBean
     private GodViewAccessService godViewAccessService;
+    @MockitoBean
+    private AgentRunService agentRunService;
+    @MockitoBean
+    private AgentTaskService agentTaskService;
+    @MockitoBean
+    private GameEventService gameEventService;
 
     @Test
     void startRoomReturnsUnifiedResponse() throws Exception {
@@ -95,6 +111,72 @@ class RoomControllerApiTest {
         mockMvc.perform(get("/api/rooms/room-1/god-view").header("X-God-View-Token", "token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.godView").value(true));
+    }
+
+    @Test
+    void agentRunsRequireGodViewToken() throws Exception {
+        doThrow(new com.example.aiwerewolf.common.exception.BusinessException("ACCESS_DENIED", "访问上帝视角需要主持人令牌"))
+                .when(godViewAccessService).verify("room-1", null);
+
+        mockMvc.perform(get("/api/rooms/room-1/agent-runs"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void agentRunsWithTokenReturnsRecentRuns() throws Exception {
+        when(agentRunService.listRecentForRoom("room-1")).thenReturn(List.of(new AgentRunResponse(
+                "run-1", "room-1", "player-1", "player-1", 1, GamePhase.DAY_VOTE,
+                AgentRunPurpose.VOTE, AgentRunStatus.FALLBACK, true, 2, 13,
+                "role-prompts-v1:VILLAGER", "task-prompts-v1:VOTE/output-schema-v1:VOTE", "mock", "mock-json-v1",
+                "{}", "{\"targetPlayerId\":\"player-2\"}", "fallback", Instant.now())));
+
+        mockMvc.perform(get("/api/rooms/room-1/agent-runs").header("X-God-View-Token", "token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("run-1"))
+                .andExpect(jsonPath("$.data[0].purpose").value("VOTE"))
+                .andExpect(jsonPath("$.data[0].fallbackUsed").value(true));
+    }
+
+    @Test
+    void agentTasksWithTokenReturnsRecentTasks() throws Exception {
+        when(agentTaskService.listRecentForRoom("room-1")).thenReturn(List.of(new AgentTaskSnapshot(
+                "task-1", "room-1", "player-1", 2, GamePhase.DAY_VOTE,
+                AgentRunPurpose.VOTE, AgentTaskStatus.SUCCEEDED,
+                Instant.now(), Instant.now(), Instant.now(), 12, null)));
+
+        mockMvc.perform(get("/api/rooms/room-1/agent-tasks").header("X-God-View-Token", "token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].taskId").value("task-1"))
+                .andExpect(jsonPath("$.data[0].purpose").value("VOTE"))
+                .andExpect(jsonPath("$.data[0].status").value("SUCCEEDED"));
+    }
+
+    @Test
+    void replayEndpointsReturnEventsWithGodReplayProtected() throws Exception {
+        Instant now = Instant.now();
+        when(gameEventService.listPublicReplay("room-1")).thenReturn(List.of(new GameEventResponse(
+                "event-1", "room-1", 1, GamePhase.DAY_SPEECH, "SPEECH",
+                "{\"content\":\"hello\"}", MemoryScope.PUBLIC, now)));
+        when(gameEventService.listGodReplay("room-1")).thenReturn(List.of(new GameEventResponse(
+                "event-2", "room-1", 1, GamePhase.SEER_ACTION, "SEER_CHECK",
+                "{\"content\":\"secret\"}", MemoryScope.PRIVATE, now)));
+        doThrow(new com.example.aiwerewolf.common.exception.BusinessException("ACCESS_DENIED", "访问上帝视角需要主持人令牌"))
+                .when(godViewAccessService).verify("room-1", null);
+
+        mockMvc.perform(get("/api/rooms/room-1/replay/public"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("event-1"))
+                .andExpect(jsonPath("$.data[0].scope").value("PUBLIC"));
+
+        mockMvc.perform(get("/api/rooms/room-1/replay/god"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        mockMvc.perform(get("/api/rooms/room-1/replay/god").header("X-God-View-Token", "token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("event-2"))
+                .andExpect(jsonPath("$.data[0].scope").value("PRIVATE"));
     }
 
     @Test

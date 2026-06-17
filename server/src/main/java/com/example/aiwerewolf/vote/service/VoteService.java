@@ -2,6 +2,9 @@ package com.example.aiwerewolf.vote.service;
 
 import com.example.aiwerewolf.agent.core.AiAgentService;
 import com.example.aiwerewolf.agent.dto.AiVoteDecision;
+import com.example.aiwerewolf.aiinfra.run.AgentRunPurpose;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskRequest;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskService;
 import com.example.aiwerewolf.common.exception.BusinessException;
 import com.example.aiwerewolf.game.engine.GameOperationValidator;
 import com.example.aiwerewolf.game.phase.GamePhase;
@@ -18,7 +21,6 @@ import org.springframework.stereotype.Service;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -31,19 +33,22 @@ public class VoteService {
     private final GameViewBuilder gameViewBuilder;
     private final MemoryService memoryService;
     private final GameOperationValidator operationValidator;
+    private final AgentTaskService agentTaskService;
 
     public VoteService(VoteRepository voteRepository,
                        PlayerRepository playerRepository,
                        AiAgentService aiAgentService,
                        GameViewBuilder gameViewBuilder,
                        MemoryService memoryService,
-                       GameOperationValidator operationValidator) {
+                       GameOperationValidator operationValidator,
+                       AgentTaskService agentTaskService) {
         this.voteRepository = voteRepository;
         this.playerRepository = playerRepository;
         this.aiAgentService = aiAgentService;
         this.gameViewBuilder = gameViewBuilder;
         this.memoryService = memoryService;
         this.operationValidator = operationValidator;
+        this.agentTaskService = agentTaskService;
     }
 
     public VoteEntity submitHumanVote(String roomId, int round, String playerId, VoteRequest request) {
@@ -64,7 +69,9 @@ public class VoteService {
             if (player.getType() != PlayerType.AI || !player.isCanVote()) {
                 continue;
             }
-            AiVoteDecision decision = aiAgentService.decideVote(player.getId(), gameViewBuilder.buildPrivateView(roomId, player.getId()));
+            AiVoteDecision decision = agentTaskService.submitAndAwait(
+                    new AgentTaskRequest(roomId, player.getId(), round, GamePhase.DAY_VOTE, AgentRunPurpose.VOTE),
+                    () -> aiAgentService.decideVote(player.getId(), gameViewBuilder.buildPrivateView(roomId, player.getId())));
             if (decision.targetPlayerId() != null) {
                 saveVote(roomId, round, player.getId(), decision.targetPlayerId(), decision.reason());
             }
@@ -98,12 +105,16 @@ public class VoteService {
                     vote.setReason(reason == null ? "无" : reason);
                     VoteEntity saved = voteRepository.save(vote);
                     memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_VOTE, "VOTE",
-                            voterId + " 投票给 " + targetId);
+                            playerLabel(roomId, voterId) + " 投票给 " + playerLabel(roomId, targetId));
                     return saved;
                 });
     }
 
-    private Optional<PlayerEntity> findPlayer(String playerId) {
-        return playerRepository.findById(Objects.requireNonNull(playerId, "playerId must not be null"));
+    private String playerLabel(String roomId, String playerId) {
+        return playerRepository.findById(playerId)
+                .filter(player -> roomId.equals(player.getRoomId()))
+                .map(player -> player.getSeatNumber() + " 号 " + player.getName())
+                .orElse(playerId);
     }
+
 }

@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["speech", "claimedRole", "suspicions", "trustedPlayers", "strategySummary"],
+  "properties": {
+    "speech": {"type": "string"},
+    "claimedRole": {"type": "string"},
+    "suspicions": {"type": "array"},
+    "trustedPlayers": {"type": "array"},
+    "strategySummary": {"type": "string"}
+  }
+}

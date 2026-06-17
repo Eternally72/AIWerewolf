@@ -35,6 +35,7 @@ server/src/main/resources/application-prod.yml
 web/node_modules/
 web/dist/
 web/.vite/
+web/tsconfig.tsbuildinfo
 web/.env.local
 web/.env.development.local
 web/.env.production.local

@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["targetPlayerId", "reason", "confidence"],
+  "properties": {
+    "targetPlayerId": {"type": "string"},
+    "reason": {"type": "string"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}

@@ -1,8 +1,14 @@
 package com.example.aiwerewolf.room.controller;
 
 import com.example.aiwerewolf.action.service.GameActionRequest;
+import com.example.aiwerewolf.aiinfra.run.AgentRunResponse;
+import com.example.aiwerewolf.aiinfra.run.AgentRunService;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskService;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskSnapshot;
 import com.example.aiwerewolf.common.exception.BusinessException;
 import com.example.aiwerewolf.common.response.ApiResponse;
+import com.example.aiwerewolf.game.event.GameEventResponse;
+import com.example.aiwerewolf.game.event.GameEventService;
 import com.example.aiwerewolf.game.engine.GamePhaseEngine;
 import com.example.aiwerewolf.game.view.GameView;
 import com.example.aiwerewolf.game.view.GameViewBuilder;
@@ -38,6 +44,9 @@ public class RoomController {
     private final RoleCatalogService roleCatalogService;
     private final WebSocketPushService pushService;
     private final GodViewAccessService godViewAccessService;
+    private final AgentRunService agentRunService;
+    private final AgentTaskService agentTaskService;
+    private final GameEventService gameEventService;
 
     public RoomController(RoomService roomService,
                           GamePhaseEngine gamePhaseEngine,
@@ -48,7 +57,10 @@ public class RoomController {
                           DefaultConfigService defaultConfigService,
                           RoleCatalogService roleCatalogService,
                           WebSocketPushService pushService,
-                          GodViewAccessService godViewAccessService) {
+                          GodViewAccessService godViewAccessService,
+                          AgentRunService agentRunService,
+                          AgentTaskService agentTaskService,
+                          GameEventService gameEventService) {
         this.roomService = roomService;
         this.gamePhaseEngine = gamePhaseEngine;
         this.gameViewBuilder = gameViewBuilder;
@@ -59,6 +71,9 @@ public class RoomController {
         this.roleCatalogService = roleCatalogService;
         this.pushService = pushService;
         this.godViewAccessService = godViewAccessService;
+        this.agentRunService = agentRunService;
+        this.agentTaskService = agentTaskService;
+        this.gameEventService = gameEventService;
     }
 
     @PostMapping("/rooms")
@@ -133,6 +148,22 @@ public class RoomController {
         return ok(gameViewBuilder.buildGodView(safeRoomId));
     }
 
+    @GetMapping("/rooms/{roomId}/agent-runs")
+    public ApiResponse<List<AgentRunResponse>> agentRuns(@PathVariable String roomId,
+                                                         @RequestHeader(name = "X-God-View-Token", required = false) String token) {
+        String safeRoomId = requiredId(roomId, "roomId");
+        godViewAccessService.verify(safeRoomId, token);
+        return ok(agentRunService.listRecentForRoom(safeRoomId));
+    }
+
+    @GetMapping("/rooms/{roomId}/agent-tasks")
+    public ApiResponse<List<AgentTaskSnapshot>> agentTasks(@PathVariable String roomId,
+                                                           @RequestHeader(name = "X-God-View-Token", required = false) String token) {
+        String safeRoomId = requiredId(roomId, "roomId");
+        godViewAccessService.verify(safeRoomId, token);
+        return ok(agentTaskService.listRecentForRoom(safeRoomId));
+    }
+
     @PostMapping("/rooms/{roomId}/players/{playerId}/speech")
     public ApiResponse<Void> speech(@PathVariable String roomId, @PathVariable String playerId, @Valid @RequestBody SpeechRequest request) {
         String safeRoomId = requiredId(roomId, "roomId");
@@ -168,6 +199,11 @@ public class RoomController {
         return ok(gameViewBuilder.buildPublicView(requiredId(roomId, "roomId")));
     }
 
+    @GetMapping("/rooms/{roomId}/replay/public")
+    public ApiResponse<List<GameEventResponse>> publicReplay(@PathVariable String roomId) {
+        return ok(gameEventService.listPublicReplay(requiredId(roomId, "roomId")));
+    }
+
     @GetMapping("/rooms/{roomId}/timeline/private/{playerId}")
     public ApiResponse<GameView> privateTimeline(@PathVariable String roomId, @PathVariable String playerId) {
         return ok(gameViewBuilder.buildPrivateView(requiredId(roomId, "roomId"), requiredId(playerId, "playerId")));
@@ -176,6 +212,14 @@ public class RoomController {
     @GetMapping("/rooms/{roomId}/timeline/god")
     public ApiResponse<GameView> godTimeline(@PathVariable String roomId, @RequestHeader(name = "X-God-View-Token", required = false) String token) {
         return godView(roomId, token);
+    }
+
+    @GetMapping("/rooms/{roomId}/replay/god")
+    public ApiResponse<List<GameEventResponse>> godReplay(@PathVariable String roomId,
+                                                          @RequestHeader(name = "X-God-View-Token", required = false) String token) {
+        String safeRoomId = requiredId(roomId, "roomId");
+        godViewAccessService.verify(safeRoomId, token);
+        return ok(gameEventService.listGodReplay(safeRoomId));
     }
 
     @GetMapping("/roles")
