@@ -16,10 +16,13 @@ import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.role.model.Role;
 import com.example.aiwerewolf.speech.entity.SpeechEntity;
 import com.example.aiwerewolf.speech.repository.SpeechRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class SpeechService {
@@ -30,6 +33,7 @@ public class SpeechService {
     private final MemoryService memoryService;
     private final GameOperationValidator operationValidator;
     private final AgentTaskService agentTaskService;
+    private final ObjectMapper objectMapper;
 
     public SpeechService(SpeechRepository speechRepository,
                          PlayerRepository playerRepository,
@@ -37,7 +41,8 @@ public class SpeechService {
                          GameViewBuilder gameViewBuilder,
                          MemoryService memoryService,
                          GameOperationValidator operationValidator,
-                         AgentTaskService agentTaskService) {
+                         AgentTaskService agentTaskService,
+                         ObjectMapper objectMapper) {
         this.speechRepository = speechRepository;
         this.playerRepository = playerRepository;
         this.aiAgentService = aiAgentService;
@@ -45,6 +50,7 @@ public class SpeechService {
         this.memoryService = memoryService;
         this.operationValidator = operationValidator;
         this.agentTaskService = agentTaskService;
+        this.objectMapper = objectMapper;
     }
 
     public SpeechEntity submitHumanSpeech(String roomId, int round, String playerId, SpeechRequest request) {
@@ -61,12 +67,19 @@ public class SpeechService {
             if (player.getType() != PlayerType.AI) {
                 continue;
             }
+            memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_SPEECH, "SPEECH_TURN_STARTED",
+                    playerLabel(roomId, player.getId()) + " 正在思考发言",
+                    speechTurnMetadata(player));
             AiSpeechDecision decision = agentTaskService.submitAndAwait(
                     new AgentTaskRequest(roomId, player.getId(), round, GamePhase.DAY_SPEECH, AgentRunPurpose.SPEECH),
                     () -> aiAgentService.generateSpeech(player.getId(), gameViewBuilder.buildPrivateView(roomId, player.getId())));
             saveSpeech(roomId, round, player.getId(), decision.speech(), parseRole(decision.claimedRole()));
+            appendPublicSpeechSummary(roomId, round);
             memoryService.appendPrivateMemory(roomId, round, GamePhase.DAY_SPEECH, player.getId(),
                     "AI_STRATEGY", decision.strategySummary());
+            memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_SPEECH, "SPEECH_TURN_COMPLETED",
+                    playerLabel(roomId, player.getId()) + " 已完成发言",
+                    speechTurnMetadata(player));
         }
     }
 
@@ -109,6 +122,55 @@ public class SpeechService {
             }
         }
         return null;
+    }
+
+    private void appendPublicSpeechSummary(String roomId, int round) {
+        List<SpeechEntity> roundSpeeches = speechRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream()
+                .filter(SpeechEntity::isPublicVisible)
+                .filter(speech -> speech.getRoundNumber() == round)
+                .toList();
+        if (roundSpeeches.isEmpty()) {
+            return;
+        }
+        int fromIndex = Math.max(0, roundSpeeches.size() - 5);
+        String summary = roundSpeeches.subList(fromIndex, roundSpeeches.size()).stream()
+                .map(speech -> playerLabel(roomId, speech.getPlayerId()) + "：" + speech.getContent())
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
+        memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_SPEECH, "PUBLIC_SPEECH_SUMMARY",
+                "当前公开发言摘要：\n" + summary,
+                speechSummaryMetadata(roomId, round, roundSpeeches));
+    }
+
+    private String speechTurnMetadata(PlayerEntity player) {
+        return toJson(Map.of(
+                "playerId", player.getId(),
+                "seatNumber", player.getSeatNumber(),
+                "playerName", player.getName()));
+    }
+
+    private String speechSummaryMetadata(String roomId, int round, List<SpeechEntity> roundSpeeches) {
+        // 摘要不仅保留文本，也保留结构化发言列表，GodView 后续可以按玩家、轮次做评估。
+        List<Map<String, Object>> speeches = roundSpeeches.stream()
+                .map(speech -> Map.<String, Object>of(
+                        "playerId", speech.getPlayerId(),
+                        "playerLabel", playerLabel(roomId, speech.getPlayerId()),
+                        "roundNumber", speech.getRoundNumber(),
+                        "content", speech.getContent(),
+                        "claimedRole", speech.getClaimedRole() == null ? "" : speech.getClaimedRole().name()))
+                .toList();
+        return toJson(Map.of(
+                "roundNumber", round,
+                "speechCount", roundSpeeches.size(),
+                "speeches", speeches));
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            return "{}";
+        }
     }
 
 }

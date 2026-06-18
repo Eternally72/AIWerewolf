@@ -129,12 +129,13 @@ class RoomControllerApiTest {
                 "run-1", "room-1", "player-1", "player-1", 1, GamePhase.DAY_VOTE,
                 AgentRunPurpose.VOTE, AgentRunStatus.FALLBACK, true, 2, 13,
                 "role-prompts-v1:VILLAGER", "task-prompts-v1:VOTE/output-schema-v1:VOTE", "mock", "mock-json-v1",
-                "{}", "{\"targetPlayerId\":\"player-2\"}", "fallback", Instant.now())));
+                "{\"ownRole\":\"VILLAGER\"}", "{}", "{\"targetPlayerId\":\"player-2\"}", "fallback", Instant.now())));
 
         mockMvc.perform(get("/api/rooms/room-1/agent-runs").header("X-God-View-Token", "token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].id").value("run-1"))
                 .andExpect(jsonPath("$.data[0].purpose").value("VOTE"))
+                .andExpect(jsonPath("$.data[0].inputViewSnapshotJson").value("{\"ownRole\":\"VILLAGER\"}"))
                 .andExpect(jsonPath("$.data[0].fallbackUsed").value(true));
     }
 

@@ -13,6 +13,7 @@ public record MemoryView(
         MemoryScope scope,
         String eventType,
         String content,
+        String metadataJson,
         Instant createdAt
 ) {
     public static MemoryView of(MemoryEntryEntity entry) {
@@ -23,6 +24,7 @@ public record MemoryView(
                 entry.getScope(),
                 entry.getEventType(),
                 entry.getContent(),
+                entry.getMetadataJson(),
                 entry.getCreatedAt()
         );
     }

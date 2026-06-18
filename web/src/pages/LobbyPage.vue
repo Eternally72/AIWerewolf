@@ -9,7 +9,9 @@
         </div>
         <div class="actions">
           <button class="btn secondary" @click="copy">复制房间号</button>
-          <button class="btn" @click="start">开始游戏</button>
+          <button class="btn" :disabled="store.loading" @click="start">
+            {{ store.loading ? '正在开局...' : '开始游戏' }}
+          </button>
         </div>
       </header>
       <section class="glass seats">
@@ -19,6 +21,7 @@
           <span>{{ seat === 1 ? '主持 / AI' : '待分配' }}</span>
         </article>
       </section>
+      <p v-if="store.error" class="error">{{ store.error }}</p>
     </section>
   </main>
 </template>
@@ -35,8 +38,9 @@ const roomId = computed(() => String(route.params.roomId))
 const seats = computed(() => Array.from({ length: store.room?.totalSeats ?? 7 }, (_, index) => index + 1))
 
 async function start() {
+  if (store.loading) return
   await store.start(roomId.value)
-  router.push(`/rooms/${roomId.value}/game`)
+  await router.push(`/rooms/${roomId.value}/game`)
 }
 
 function copy() {
@@ -71,5 +75,8 @@ function copy() {
 }
 .seat span {
   color: #9fb0d0;
+}
+.error {
+  color: #fecaca;
 }
 </style>

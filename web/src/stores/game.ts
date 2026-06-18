@@ -82,8 +82,17 @@ export const useGameStore = defineStore('game', {
       }
     },
     async start(roomId: string) {
-      this.room = await startRoom(roomId)
-      this.dispatch({ type: 'ROOM_PHASE_CHANGED', room: this.room })
+      this.loading = true
+      this.error = ''
+      try {
+        this.room = await startRoom(roomId)
+        this.dispatch({ type: 'ROOM_PHASE_CHANGED', room: this.room })
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : '开始游戏失败'
+        throw error
+      } finally {
+        this.loading = false
+      }
     },
     async loadPublic(roomId: string) {
       // 同一房间的 WebSocket 事件可能密集到达，请求合并可以避免重复拉取完整视图。
@@ -92,18 +101,27 @@ export const useGameStore = defineStore('game', {
         loading = getPublicView(roomId).finally(() => publicViewLoads.delete(roomId))
         publicViewLoads.set(roomId, loading)
       }
-      this.syncView(await loading)
+      let view = await loading
+      if (view.players.length === 0 && view.status === 'RUNNING') {
+        await startRoom(roomId)
+        view = await getPublicView(roomId)
+      }
+      this.syncView(view)
+      this.error = ''
     },
     async loadGod(roomId: string) {
       this.syncView(await getGodView(roomId))
+      this.error = ''
     },
     async auto(roomId: string) {
       this.room = await autoAdvance(roomId)
       await this.loadPublic(roomId)
+      this.error = ''
     },
     async simulate(roomId: string) {
       this.room = await simulateRoom(roomId)
       await this.loadGod(roomId)
+      this.error = ''
     }
   }
 })

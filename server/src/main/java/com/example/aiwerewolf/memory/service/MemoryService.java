@@ -35,6 +35,10 @@ public class MemoryService {
         return append(roomId, round, phase, MemoryScope.PUBLIC, null, null, type, content, "{}");
     }
 
+    public MemoryEntryEntity appendPublicMemory(String roomId, int round, GamePhase phase, String type, String content, String metadataJson) {
+        return append(roomId, round, phase, MemoryScope.PUBLIC, null, null, type, content, metadataJson);
+    }
+
     public MemoryEntryEntity appendPrivateMemory(String roomId, int round, GamePhase phase, String playerId, String type, String content) {
         MemoryEntryEntity entry = append(roomId, round, phase, MemoryScope.PRIVATE, playerId, playerId, type, content, "{}");
         shortTermMemoryService.appendObservation(roomId, playerId, content);
@@ -50,6 +54,10 @@ public class MemoryService {
 
     public MemoryEntryEntity appendGodViewMemory(String roomId, int round, GamePhase phase, String type, String content) {
         return append(roomId, round, phase, MemoryScope.GOD_VIEW, null, null, type, content, "{}");
+    }
+
+    public MemoryEntryEntity appendGodViewMemory(String roomId, int round, GamePhase phase, String type, String content, String metadataJson) {
+        return append(roomId, round, phase, MemoryScope.GOD_VIEW, null, null, type, content, metadataJson);
     }
 
     public List<MemoryEntryEntity> listVisibleMemoriesForPlayer(String roomId, String playerId) {

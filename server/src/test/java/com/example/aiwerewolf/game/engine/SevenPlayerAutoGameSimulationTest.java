@@ -2,6 +2,7 @@ package com.example.aiwerewolf.game.engine;
 
 import com.example.aiwerewolf.aiinfra.observability.AiInfraMetrics;
 import com.example.aiwerewolf.TestFixtures;
+import com.example.aiwerewolf.action.repository.GameActionRepository;
 import com.example.aiwerewolf.action.service.DeathResolutionService;
 import com.example.aiwerewolf.action.service.NightActionService;
 import com.example.aiwerewolf.game.phase.GamePhase;
@@ -15,7 +16,9 @@ import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.role.model.Role;
 import com.example.aiwerewolf.room.entity.RoomEntity;
 import com.example.aiwerewolf.room.repository.RoomRepository;
+import com.example.aiwerewolf.speech.repository.SpeechRepository;
 import com.example.aiwerewolf.speech.service.SpeechService;
+import com.example.aiwerewolf.vote.repository.VoteRepository;
 import com.example.aiwerewolf.vote.service.VoteService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -74,6 +77,9 @@ class SevenPlayerAutoGameSimulationTest {
         GamePhaseEngine engine = new GamePhaseEngine(
                 roomRepository,
                 playerRepository,
+                mock(GameActionRepository.class),
+                mock(SpeechRepository.class),
+                mock(VoteRepository.class),
                 nightActionService,
                 mock(SpeechService.class),
                 mock(VoteService.class),
@@ -89,7 +95,7 @@ class SevenPlayerAutoGameSimulationTest {
         RoomEntity result = engine.advanceUntilHumanInputRequired(roomId);
 
         assertThat(result.getPhase()).isEqualTo(GamePhase.GAME_OVER);
-        verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.GUARD_ACTION);
+        verify(nightActionService, never()).generateAiNightActions(roomId, 1, GamePhase.GUARD_ACTION);
         verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.WEREWOLF_ACTION);
         verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.SEER_ACTION);
         verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.WITCH_ACTION);

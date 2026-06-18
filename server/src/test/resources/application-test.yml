@@ -1,0 +1,38 @@
+spring:
+  main:
+    banner-mode: off
+  config:
+    import: ""
+  datasource:
+    url: jdbc:mysql://localhost:3306/ai_werewolf_test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: test
+    password: test
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      repositories:
+        enabled: false
+
+llm:
+  provider: mock
+
+logging:
+  level:
+    root: WARN
+    com.example.aiwerewolf: WARN
+    org.springframework: WARN
+    org.hibernate: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

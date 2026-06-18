@@ -15,6 +15,7 @@
         <h2>身份揭示</h2>
         <div class="players">
           <article v-for="player in view?.players ?? []" :key="player.id" class="player" :class="campClass(player.camp, '')">
+            <img v-if="roleAsset(player.role)" :src="roleAsset(player.role) ?? ''" :alt="roleName(player.role)" />
             <strong>{{ player.seatNumber }} 号 {{ player.name }}</strong>
             <span>{{ roleName(player.role) }} · {{ campName(player.camp) }}</span>
             <em>{{ player.alive ? '存活' : '死亡' }}</em>
@@ -39,7 +40,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getPublicView } from '../api/client'
-import { backgroundAssets } from '../assets'
+import { backgroundAssets, roleAsset } from '../assets'
 import { campClass, campName, phaseName, replacePlayerIds, roleName } from '../game/gameLabels'
 import type { GameView } from '../types/game'
 
@@ -111,6 +112,13 @@ onMounted(async () => {
   border-radius: 8px;
   border: 1px solid rgba(232, 238, 255, 0.14);
   background: rgba(6, 9, 18, 0.62);
+}
+.player img {
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.08);
 }
 .player span,
 .player em {

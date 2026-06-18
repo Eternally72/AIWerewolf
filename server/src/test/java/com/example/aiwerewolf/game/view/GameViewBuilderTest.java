@@ -16,6 +16,7 @@ import com.example.aiwerewolf.room.repository.RoomRepository;
 import com.example.aiwerewolf.room.entity.RoomEntity;
 import com.example.aiwerewolf.room.entity.RoomStatus;
 import com.example.aiwerewolf.speech.repository.SpeechRepository;
+import com.example.aiwerewolf.vote.entity.VoteEntity;
 import com.example.aiwerewolf.vote.repository.VoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -134,5 +135,51 @@ class GameViewBuilderTest {
 
         assertThat(view.players()).filteredOn(p -> p.id().equals("seer")).first().extracting(PlayerView::role).isEqualTo(Role.SEER);
         assertThat(view.players()).filteredOn(p -> p.id().equals("wolf")).first().extracting(PlayerView::role).isNull();
+    }
+
+    @Test
+    void publicViewHidesVotesDuringVotePhase() {
+        RoomEntity room = TestFixtures.room(roomId);
+        room.setPhase(com.example.aiwerewolf.game.phase.GamePhase.DAY_VOTE);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(memoryEntryRepository.findByRoomIdAndScopeOrderByCreatedAtAsc(roomId, MemoryScope.PUBLIC)).thenReturn(List.of());
+        when(voteRepository.findByRoomIdOrderByCreatedAtAsc(roomId)).thenReturn(List.of(
+                vote("v1", "wolf", "seer"),
+                vote("v2", "villager", "wolf")
+        ));
+
+        GameView view = builder.buildPublicView(roomId);
+
+        assertThat(view.votes()).isEmpty();
+    }
+
+    @Test
+    void privateViewOnlyShowsOwnVoteDuringVotePhase() {
+        RoomEntity room = TestFixtures.room(roomId);
+        room.setPhase(com.example.aiwerewolf.game.phase.GamePhase.DAY_VOTE);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(memoryEntryRepository.findByRoomIdOrderByCreatedAtAsc(roomId)).thenReturn(List.of());
+        when(voteRepository.findByRoomIdOrderByCreatedAtAsc(roomId)).thenReturn(List.of(
+                vote("v1", "wolf", "seer"),
+                vote("v2", "villager", "wolf"),
+                vote("v3", "seer", "wolf")
+        ));
+
+        GameView view = builder.buildPrivateView(roomId, "villager");
+
+        assertThat(view.votes()).hasSize(1);
+        assertThat(view.votes().getFirst().voterPlayerId()).isEqualTo("villager");
+        assertThat(view.votes().getFirst().targetPlayerId()).isEqualTo("wolf");
+    }
+
+    private VoteEntity vote(String id, String voterId, String targetId) {
+        VoteEntity vote = new VoteEntity();
+        vote.setId(id);
+        vote.setRoomId(roomId);
+        vote.setRoundNumber(1);
+        vote.setVoterPlayerId(voterId);
+        vote.setTargetPlayerId(targetId);
+        vote.setReason("test");
+        return vote;
     }
 }

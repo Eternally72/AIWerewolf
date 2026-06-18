@@ -15,10 +15,13 @@ import com.example.aiwerewolf.player.entity.PlayerType;
 import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.vote.entity.VoteEntity;
 import com.example.aiwerewolf.vote.repository.VoteRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +37,7 @@ public class VoteService {
     private final MemoryService memoryService;
     private final GameOperationValidator operationValidator;
     private final AgentTaskService agentTaskService;
+    private final ObjectMapper objectMapper;
 
     public VoteService(VoteRepository voteRepository,
                        PlayerRepository playerRepository,
@@ -41,7 +45,8 @@ public class VoteService {
                        GameViewBuilder gameViewBuilder,
                        MemoryService memoryService,
                        GameOperationValidator operationValidator,
-                       AgentTaskService agentTaskService) {
+                       AgentTaskService agentTaskService,
+                       ObjectMapper objectMapper) {
         this.voteRepository = voteRepository;
         this.playerRepository = playerRepository;
         this.aiAgentService = aiAgentService;
@@ -49,6 +54,7 @@ public class VoteService {
         this.memoryService = memoryService;
         this.operationValidator = operationValidator;
         this.agentTaskService = agentTaskService;
+        this.objectMapper = objectMapper;
     }
 
     public VoteEntity submitHumanVote(String roomId, int round, String playerId, VoteRequest request) {
@@ -79,10 +85,14 @@ public class VoteService {
     }
 
     public Optional<String> calculateVoteResult(String roomId, int round) {
-        Map<String, Long> counts = voteRepository.findByRoomIdAndRoundNumber(roomId, round).stream()
+        List<VoteEntity> votes = voteRepository.findByRoomIdAndRoundNumber(roomId, round);
+        Map<String, Long> counts = votes.stream()
                 .map(VoteEntity::getTargetPlayerId)
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
         if (counts.isEmpty()) {
+            memoryService.appendPublicMemory(roomId, round, GamePhase.EXECUTION, "VOTE_RESULT",
+                    "本轮无人投票，未放逐玩家",
+                    toJson(Map.of("roundNumber", round, "votes", List.of(), "exiledPlayerId", "")));
             return Optional.empty();
         }
         long top = counts.values().stream().max(Long::compareTo).orElse(0L);
@@ -91,7 +101,11 @@ public class VoteService {
                 .map(Map.Entry::getKey)
                 .sorted(Comparator.naturalOrder())
                 .toList();
-        return leaders.size() == 1 ? Optional.of(leaders.getFirst()) : Optional.empty();
+        Optional<String> result = leaders.size() == 1 ? Optional.of(leaders.getFirst()) : Optional.empty();
+        memoryService.appendPublicMemory(roomId, round, GamePhase.EXECUTION, "VOTE_RESULT",
+                publicVoteResult(roomId, votes, result),
+                voteResultMetadata(roomId, round, votes, counts, result));
+        return result;
     }
 
     public VoteEntity saveVote(String roomId, int round, String voterId, String targetId, @Nullable String reason) {
@@ -104,8 +118,9 @@ public class VoteService {
                     vote.setTargetPlayerId(targetId);
                     vote.setReason(reason == null ? "无" : reason);
                     VoteEntity saved = voteRepository.save(vote);
-                    memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_VOTE, "VOTE",
-                            playerLabel(roomId, voterId) + " 投票给 " + playerLabel(roomId, targetId));
+                    String content = playerLabel(roomId, voterId) + " 已私下投票给 " + playerLabel(roomId, targetId);
+                    memoryService.appendPrivateMemory(roomId, round, GamePhase.DAY_VOTE, voterId, "PRIVATE_VOTE", content);
+                    memoryService.appendGodViewMemory(roomId, round, GamePhase.DAY_VOTE, "PRIVATE_VOTE", content);
                     return saved;
                 });
     }
@@ -115,6 +130,56 @@ public class VoteService {
                 .filter(player -> roomId.equals(player.getRoomId()))
                 .map(player -> player.getSeatNumber() + " 号 " + player.getName())
                 .orElse(playerId);
+    }
+
+    private String publicVoteResult(String roomId, List<VoteEntity> votes, Optional<String> exiledPlayerId) {
+        String details = sortedVotes(roomId, votes).stream()
+                .map(vote -> playerLabel(roomId, vote.getVoterPlayerId()) + " -> " + playerLabel(roomId, vote.getTargetPlayerId()))
+                .collect(Collectors.joining("；\n"));
+        String result = exiledPlayerId
+                .map(playerId -> "放逐结果：" + playerLabel(roomId, playerId))
+                .orElse("平票或无唯一最高票，未放逐玩家");
+        return "投票图谱：\n" + details + "。\n" + result;
+    }
+
+    private String voteResultMetadata(String roomId, int round, List<VoteEntity> votes, Map<String, Long> counts, Optional<String> exiledPlayerId) {
+        List<Map<String, Object>> voteGraph = sortedVotes(roomId, votes).stream()
+                .map(vote -> Map.<String, Object>of(
+                        "voterPlayerId", vote.getVoterPlayerId(),
+                        "voterLabel", playerLabel(roomId, vote.getVoterPlayerId()),
+                        "targetPlayerId", vote.getTargetPlayerId(),
+                        "targetLabel", playerLabel(roomId, vote.getTargetPlayerId()),
+                        "reason", vote.getReason() == null ? "" : vote.getReason()))
+                .toList();
+        Map<String, Long> sortedCounts = counts.entrySet().stream()
+                .sorted(Comparator.comparingInt(entry -> seatNumber(roomId, entry.getKey())))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left, LinkedHashMap::new));
+        return toJson(Map.of(
+                "roundNumber", round,
+                "votes", voteGraph,
+                "counts", sortedCounts,
+                "exiledPlayerId", exiledPlayerId.orElse("")));
+    }
+
+    private List<VoteEntity> sortedVotes(String roomId, List<VoteEntity> votes) {
+        return votes.stream()
+                .sorted(Comparator.comparingInt(vote -> seatNumber(roomId, vote.getVoterPlayerId())))
+                .toList();
+    }
+
+    private int seatNumber(String roomId, String playerId) {
+        return playerRepository.findById(playerId)
+                .filter(player -> roomId.equals(player.getRoomId()))
+                .map(PlayerEntity::getSeatNumber)
+                .orElse(Integer.MAX_VALUE);
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            return "{}";
+        }
     }
 
 }

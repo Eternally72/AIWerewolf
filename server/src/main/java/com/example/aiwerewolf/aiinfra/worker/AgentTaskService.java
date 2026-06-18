@@ -33,10 +33,23 @@ public class AgentTaskService {
     }
 
     public <T> T submitAndAwait(AgentTaskRequest request, Supplier<T> supplier) {
+        return await(submitHandle(request, supplier)).result();
+    }
+
+    public <T> CompletableFuture<AgentTaskResult<T>> submit(AgentTaskRequest request, Supplier<T> supplier) {
+        return submitHandle(request, supplier).future();
+    }
+
+    public <T> AgentTaskHandle<T> submitHandle(AgentTaskRequest request, Supplier<T> supplier) {
         AgentTaskEntity task = createTask(request);
-        CompletableFuture<AgentTaskResult<T>> future = execute(task, supplier);
+        return new AgentTaskHandle<>(task, execute(task, supplier));
+    }
+
+    public <T> AgentTaskResult<T> await(AgentTaskHandle<T> handle) {
+        AgentTaskEntity task = handle.task();
+        CompletableFuture<AgentTaskResult<T>> future = handle.future();
         try {
-            return future.get(awaitTimeout.toMillis(), TimeUnit.MILLISECONDS).result();
+            return future.get(awaitTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException ex) {
             future.cancel(true);
             task.markTimedOut();
@@ -52,10 +65,6 @@ public class AgentTaskService {
             }
             throw new BusinessException("AGENT_TASK_FAILED", safeError(cause == null ? ex : cause));
         }
-    }
-
-    public <T> CompletableFuture<AgentTaskResult<T>> submit(AgentTaskRequest request, Supplier<T> supplier) {
-        return execute(createTask(request), supplier);
     }
 
     private AgentTaskEntity createTask(AgentTaskRequest request) {

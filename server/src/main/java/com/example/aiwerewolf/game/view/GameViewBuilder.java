@@ -10,8 +10,10 @@ import com.example.aiwerewolf.room.entity.RoomStatus;
 import com.example.aiwerewolf.room.repository.RoomRepository;
 import com.example.aiwerewolf.speech.repository.SpeechRepository;
 import com.example.aiwerewolf.vote.repository.VoteRepository;
+import com.example.aiwerewolf.vote.entity.VoteEntity;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -51,7 +53,7 @@ public class GameViewBuilder {
                         : contextAssembler.publicPlayers(roomId),
                 contextAssembler.publicMemories(roomId).stream().map(MemoryView::of).toList(),
                 speechRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().filter(s -> s.isPublicVisible()).map(SpeechView::of).toList(),
-                voteRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().map(VoteView::of).toList(),
+                publicVotes(room).stream().map(VoteView::of).toList(),
                 false
         );
     }
@@ -73,7 +75,7 @@ public class GameViewBuilder {
                 contextAssembler.privatePlayers(roomId, viewer),
                 contextAssembler.visibleMemoriesForPlayer(roomId, playerId).stream().map(MemoryView::of).toList(),
                 speechRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().filter(s -> s.isPublicVisible()).map(SpeechView::of).toList(),
-                voteRepository.findByRoomIdOrderByCreatedAtAsc(roomId).stream().map(VoteView::of).toList(),
+                privateVotes(room, playerId).stream().map(VoteView::of).toList(),
                 false
         );
     }
@@ -107,6 +109,22 @@ public class GameViewBuilder {
 
     private Optional<PlayerEntity> findPlayer(String playerId) {
         return playerRepository.findById(Objects.requireNonNull(playerId, "playerId must not be null"));
+    }
+
+    private List<VoteEntity> publicVotes(RoomEntity room) {
+        if (room.getPhase() == com.example.aiwerewolf.game.phase.GamePhase.DAY_VOTE) {
+            return List.of();
+        }
+        return voteRepository.findByRoomIdOrderByCreatedAtAsc(room.getId());
+    }
+
+    private List<VoteEntity> privateVotes(RoomEntity room, String viewerPlayerId) {
+        if (room.getPhase() == com.example.aiwerewolf.game.phase.GamePhase.DAY_VOTE) {
+            return voteRepository.findByRoomIdOrderByCreatedAtAsc(room.getId()).stream()
+                    .filter(vote -> viewerPlayerId.equals(vote.getVoterPlayerId()))
+                    .toList();
+        }
+        return voteRepository.findByRoomIdOrderByCreatedAtAsc(room.getId());
     }
 
     private RoomEntity room(String roomId) {

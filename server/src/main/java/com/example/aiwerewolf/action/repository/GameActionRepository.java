@@ -13,4 +13,6 @@ public interface GameActionRepository extends JpaRepository<GameActionEntity, St
     List<GameActionEntity> findByRoomIdAndRoundNumber(String roomId, int roundNumber);
     Optional<GameActionEntity> findByRoomIdAndRoundNumberAndPhaseAndActorPlayerIdAndActionType(
             String roomId, int roundNumber, GamePhase phase, String actorPlayerId, ActionType actionType);
+    boolean existsByRoomIdAndRoundNumberAndPhaseAndActorPlayerId(
+            String roomId, int roundNumber, GamePhase phase, String actorPlayerId);
 }

@@ -6,7 +6,9 @@ import com.example.aiwerewolf.action.repository.GameActionRepository;
 import com.example.aiwerewolf.agent.core.AiAgentService;
 import com.example.aiwerewolf.agent.dto.AiActionDecision;
 import com.example.aiwerewolf.aiinfra.run.AgentRunPurpose;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskHandle;
 import com.example.aiwerewolf.aiinfra.worker.AgentTaskRequest;
+import com.example.aiwerewolf.aiinfra.worker.AgentTaskResult;
 import com.example.aiwerewolf.aiinfra.worker.AgentTaskService;
 import com.example.aiwerewolf.common.exception.BusinessException;
 import com.example.aiwerewolf.game.engine.GameOperationValidator;
@@ -71,35 +73,25 @@ public class NightActionService {
     }
 
     public void generateAiNightActions(String roomId, int round, GamePhase phase) {
-        for (PlayerEntity player : playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId)) {
-            if (player.getType() != PlayerType.AI) {
+        List<NightActionTask> tasks = playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId).stream()
+                .filter(player -> player.getType() == PlayerType.AI)
+                .flatMap(player -> nightActionTask(roomId, round, phase, player).stream())
+                .toList();
+        for (NightActionTask task : tasks) {
+            AgentTaskResult<NightDecision> result = agentTaskService.await(task.handle());
+            NightDecision nightDecision = result.result();
+            AiActionDecision decision = nightDecision.decision();
+            if (decision.actionType() == ActionType.NONE) {
                 continue;
             }
-            Role role = player.getRole();
-            if (role == null) {
+            if (!task.ability().validateAction(nightDecision.view(), toAction(roomId, round, task.playerId(), decision))) {
                 continue;
             }
-            RoleAbility ability = roleAbilityRegistry.get(role);
-            if (ability.getNightActionType() == ActionType.NONE || phaseFor(ability.getNightActionType()) != phase) {
+            if (requiresPrimaryTarget(decision.actionType()) && blank(decision.targetPlayerId())) {
                 continue;
             }
-            GameView privateView = gameViewBuilder.buildPrivateView(roomId, player.getId());
-            if (!ability.canAct(privateView, player)) {
-                continue;
-            }
-            AiActionDecision decision = agentTaskService.submitAndAwait(
-                    new AgentTaskRequest(roomId, player.getId(), round, phase, AgentRunPurpose.NIGHT_ACTION),
-                    () -> aiAgentService.decideNightAction(player.getId(), privateView));
-            if (decision.actionType() != ActionType.NONE) {
-                if (!ability.validateAction(privateView, toAction(roomId, round, player.getId(), decision))) {
-                    continue;
-                }
-                if (requiresPrimaryTarget(decision.actionType()) && blank(decision.targetPlayerId())) {
-                    continue;
-                }
-                saveAction(roomId, round, phaseFor(decision.actionType()), player.getId(), decision.actionType(),
-                        decision.targetPlayerId(), decision.secondaryTargetPlayerId(), false);
-            }
+            saveAction(roomId, round, phaseFor(decision.actionType()), task.playerId(), decision.actionType(),
+                    decision.targetPlayerId(), decision.secondaryTargetPlayerId(), false);
         }
     }
 
@@ -112,6 +104,11 @@ public class NightActionService {
         Role role = actor.getRole();
         if (role == null) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "玩家尚未分配身份");
+        }
+        GamePhase currentPhase = operationValidator.requireRoom(roomId).getPhase();
+        if (request.actionType() == ActionType.NONE) {
+            saveAction(roomId, round, currentPhase, playerId, ActionType.NONE, null, null, false);
+            return;
         }
         RoleAbility ability = roleAbilityRegistry.get(role);
         if (requiresPrimaryTarget(request.actionType()) && blank(request.targetPlayerId())) {
@@ -264,5 +261,32 @@ public class NightActionService {
                 .filter(player -> roomId.equals(player.getRoomId()))
                 .map(player -> player.getSeatNumber() + " 号 " + player.getName())
                 .orElse(playerId);
+    }
+
+    private Optional<NightActionTask> nightActionTask(String roomId, int round, GamePhase phase, PlayerEntity player) {
+        Role role = player.getRole();
+        if (role == null) {
+            return Optional.empty();
+        }
+        RoleAbility ability = roleAbilityRegistry.get(role);
+        if (ability.getNightActionType() == ActionType.NONE || phaseFor(ability.getNightActionType()) != phase) {
+            return Optional.empty();
+        }
+        AgentTaskHandle<NightDecision> handle = agentTaskService.submitHandle(
+                new AgentTaskRequest(roomId, player.getId(), round, phase, AgentRunPurpose.NIGHT_ACTION),
+                () -> {
+                    GameView privateView = gameViewBuilder.buildPrivateView(roomId, player.getId());
+                    if (!ability.canAct(privateView, player)) {
+                        return new NightDecision(new AiActionDecision(ActionType.NONE, null, null, "当前角色无需行动"), privateView);
+                    }
+                    return new NightDecision(aiAgentService.decideNightAction(player.getId(), privateView), privateView);
+                });
+        return Optional.of(new NightActionTask(player.getId(), ability, handle));
+    }
+
+    private record NightActionTask(String playerId, RoleAbility ability, AgentTaskHandle<NightDecision> handle) {
+    }
+
+    private record NightDecision(AiActionDecision decision, GameView view) {
     }
 }

@@ -16,10 +16,19 @@ const roleFiles: Record<string, string> = {
   ELDER: 'role-elder.png'
 }
 
-const assetVariant = import.meta.env.VITE_ASSET_VARIANT ?? 'png'
-const optimized = assetVariant === 'optimized-webp'
-const ext = optimized ? 'webp' : 'png'
+type AssetVariant = 'png' | 'optimized-webp' | 'optimized-avif'
+
+const assetVariant = normalizeAssetVariant(import.meta.env.VITE_ASSET_VARIANT)
+const optimized = assetVariant !== 'png'
+const ext = assetVariant === 'optimized-avif' ? 'avif' : assetVariant === 'optimized-webp' ? 'webp' : 'png'
 const root = optimized ? '/assets/optimized' : '/assets'
+
+function normalizeAssetVariant(value?: string): AssetVariant {
+  if (value === 'optimized-webp' || value === 'optimized-avif') {
+    return value
+  }
+  return 'optimized-webp'
+}
 
 export const backgroundAssets = {
   landing: `${root}/backgrounds/landing-bg.${ext}`,

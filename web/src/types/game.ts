@@ -81,6 +81,7 @@ export type MemoryView = {
   scope: string
   eventType: string
   content: string
+  metadataJson: string
   createdAt: string
 }
 
@@ -116,6 +117,7 @@ export type AgentRun = {
   taskPromptVersion: string
   modelProvider: string
   modelName: string | null
+  inputViewSnapshotJson: string
   rawOutput: string | null
   parsedOutputJson: string | null
   errorMessage: string | null

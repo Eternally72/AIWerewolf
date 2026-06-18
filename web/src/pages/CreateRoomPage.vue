@@ -36,9 +36,14 @@
         </section>
 
         <p class="error" v-if="validation">{{ validation }}</p>
+        <p class="error" v-if="store.error">{{ store.error }}</p>
         <div class="actions">
-          <button class="btn" @click="create(false)">创建房间</button>
-          <button class="btn secondary" @click="create(true)">创建并开始</button>
+          <button class="btn" :disabled="store.loading" @click="create(false)">
+            {{ store.loading ? '正在创建...' : '创建房间' }}
+          </button>
+          <button class="btn secondary" :disabled="store.loading" @click="create(true)">
+            {{ store.loading ? '正在开局...' : '创建并开始' }}
+          </button>
         </div>
       </div>
     </section>
@@ -48,7 +53,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getDefaults, startRoom } from '../api/client'
+import { getDefaults } from '../api/client'
 import { useGameStore } from '../stores/game'
 
 const router = useRouter()
@@ -98,9 +103,9 @@ function applyTemplate() {
 }
 
 async function create(andStart: boolean) {
-  if (validation.value) return
+  if (validation.value || store.loading) return
   await store.create({ ...form })
-  if (store.room && andStart) await startRoom(store.room.id)
+  if (store.room && andStart) await store.start(store.room.id)
   if (store.room) router.push(`/rooms/${store.room.id}/${andStart ? 'game' : 'lobby'}`)
 }
 </script>

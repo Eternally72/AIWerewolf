@@ -60,6 +60,9 @@ public class GameOperationValidator {
 
     public void requireNightActionPhase(String roomId, ActionType actionType) {
         GamePhase actual = requireRoom(roomId).getPhase();
+        if (actionType == ActionType.NONE && isNightActionPhase(actual)) {
+            return;
+        }
         GamePhase expected = phaseFor(actionType);
         if (actual != expected) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "当前阶段是 " + actual + "，不能执行 " + actionType + " 行动");
@@ -74,6 +77,13 @@ public class GameOperationValidator {
             case GUARD -> GamePhase.GUARD_ACTION;
             case SWAP, LINK_LOVERS -> GamePhase.OTHER_NIGHT_ACTION;
             default -> GamePhase.NIGHT;
+        };
+    }
+
+    private boolean isNightActionPhase(GamePhase phase) {
+        return switch (phase) {
+            case GUARD_ACTION, WEREWOLF_ACTION, SEER_ACTION, WITCH_ACTION, OTHER_NIGHT_ACTION -> true;
+            default -> false;
         };
     }
 }

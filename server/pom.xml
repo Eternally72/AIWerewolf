@@ -88,6 +88,17 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>-XX:+EnableDynamicAgentLoading -Xshare:off</argLine>
+                    <systemPropertyVariables>
+                        <spring.profiles.active>test</spring.profiles.active>
+                        <SPRING_PROFILES_ACTIVE>test</SPRING_PROFILES_ACTIVE>
+                        <debug>false</debug>
+                        <logging.level.root>WARN</logging.level.root>
+                        <logging.level.org.springframework>WARN</logging.level.org.springframework>
+                        <logging.level.org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLogger>OFF</logging.level.org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLogger>
+                    </systemPropertyVariables>
+                    <environmentVariables>
+                        <SPRING_PROFILES_ACTIVE>test</SPRING_PROFILES_ACTIVE>
+                    </environmentVariables>
                 </configuration>
             </plugin>
         </plugins>

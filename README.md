@@ -20,10 +20,6 @@ AI Werewolf 是一个 Java 21 + Spring Boot + Vue 3 的多 Agent 狼人杀项目
 - 可开源：默认 Mock LLM，真实密钥只从环境变量读取。
 - 可扩展：角色能力接口、状态机、记忆作用域和默认模板均可继续扩展。
 
-## 截图
-
-截图资源待补充。素材需求见 [docs/assets-request.md](docs/assets-request.md)。
-
 ## 技术栈
 
 后端：Java 21、Spring Boot 3、Maven、MySQL 8、Redis、Spring Data JPA、Flyway、WebSocket/STOMP、JUnit 5、Mockito。  
@@ -156,10 +152,8 @@ CI 默认使用 Mock LLM，不依赖真实密钥。
 - [游戏规则](docs/game-rules.md)
 - [信息隔离](docs/memory-isolation.md)
 - [Agent 设计](docs/agent-design.md)
-- [前端设计](docs/frontend-design.md)
 - [配置说明](docs/configuration.md)
-- [素材需求](docs/assets-request.md)
 
 ## 贡献与协议
 
-欢迎阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。本项目使用 MIT License。
+本项目使用 MIT License。

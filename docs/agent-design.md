@@ -172,18 +172,29 @@ aiwerewolf.evaluation.duration
 
 ## Agent Worker
 
-第七阶段新增 `AgentTaskService`，把 Agent 决策从业务服务中的直接调用升级为任务调度模型。当前采用“异步执行 + 同步等待结果”的兼容模式：
+第七阶段新增 `AgentTaskService`，把 Agent 决策从业务服务中的直接调用升级为任务调度模型。当前采用“同阶段批量异步执行 + 阶段末同步收敛结果”的兼容模式：
 
 ```text
 GamePhaseEngine
   -> SpeechService / VoteService / NightActionService
-  -> AgentTaskService.submitAndAwait(...)
+  -> AgentTaskService.submitHandle(...)
   -> agentTaskExecutor
   -> AiAgentService
   -> LlmGateway
+  -> AgentTaskService.await(...)
 ```
 
-这样做的原因是：当前游戏状态机仍然需要在每个阶段结束前得到确定的 AI 决策，否则夜晚结算、投票放逐和胜负判断会变得不稳定。因此第七阶段先把 Worker、任务状态、超时、指标和 GodView 查询补齐，但不急着把阶段推进改成完全非阻塞。
+这样做的原因是：当前游戏状态机仍然需要在每个阶段结束前得到确定的 AI 决策，否则夜晚结算、投票放逐和胜负判断会变得不稳定。因此 Worker 会并发执行同一阶段内多个 Agent 的发言、投票和夜间行动决策，但最终写入发言、投票、行动记录时仍按座位顺序在主流程中串行收敛，保证状态机确定性。
+
+典型流程：
+
+```text
+1. 查询当前阶段可行动 AI 玩家。
+2. 批量提交 AgentTask 到 agentTaskExecutor。
+3. 多个 Agent 并发构建私有视角并调用 AiAgentService。
+4. 主流程按座位顺序 await 结果。
+5. 串行写入 Speech / Vote / GameAction，并进入阶段结算。
+```
 
 任务状态包括：
 
