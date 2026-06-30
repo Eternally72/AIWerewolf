@@ -54,6 +54,8 @@ class SevenPlayerAutoGameSimulationTest {
         RoomRepository roomRepository = mock(RoomRepository.class);
         PlayerRepository playerRepository = mock(PlayerRepository.class);
         NightActionService nightActionService = mock(NightActionService.class);
+        SpeechService speechService = mock(SpeechService.class);
+        VoteService voteService = mock(VoteService.class);
         PhaseAdvanceLockService lockService = mock(PhaseAdvanceLockService.class);
         IdempotencyService idempotencyService = mock(IdempotencyService.class);
         GameRuntimeStateCache runtimeStateCache = mock(GameRuntimeStateCache.class);
@@ -64,6 +66,9 @@ class SevenPlayerAutoGameSimulationTest {
         when(playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId)).thenReturn(players);
         when(playerRepository.findByRoomIdOrderBySeatNumberAsc(roomId)).thenReturn(players);
         when(idempotencyService.markIfAbsent(anyString(), any(Duration.class))).thenReturn(true);
+        when(nightActionService.processNextAiNightAction(eq(roomId), eq(1), any(GamePhase.class))).thenReturn(true);
+        when(speechService.processNextAiSpeech(anyString(), anyInt())).thenReturn(true);
+        when(voteService.processNextAiVote(anyString(), anyInt())).thenReturn(true);
         when(lockService.withRoomLock(eq(roomId), any())).thenAnswer(invocation -> {
             Supplier<?> supplier = invocation.getArgument(1);
             return supplier.get();
@@ -81,8 +86,8 @@ class SevenPlayerAutoGameSimulationTest {
                 mock(SpeechRepository.class),
                 mock(VoteRepository.class),
                 nightActionService,
-                mock(SpeechService.class),
-                mock(VoteService.class),
+                speechService,
+                voteService,
                 mock(DeathResolutionService.class),
                 new VictoryConditionService(),
                 memoryService,
@@ -95,10 +100,10 @@ class SevenPlayerAutoGameSimulationTest {
         RoomEntity result = engine.advanceUntilHumanInputRequired(roomId);
 
         assertThat(result.getPhase()).isEqualTo(GamePhase.GAME_OVER);
-        verify(nightActionService, never()).generateAiNightActions(roomId, 1, GamePhase.GUARD_ACTION);
-        verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.WEREWOLF_ACTION);
-        verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.SEER_ACTION);
-        verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.WITCH_ACTION);
+        verify(nightActionService, never()).processNextAiNightAction(roomId, 1, GamePhase.GUARD_ACTION);
+        verify(nightActionService).processNextAiNightAction(roomId, 1, GamePhase.WEREWOLF_ACTION);
+        verify(nightActionService).processNextAiNightAction(roomId, 1, GamePhase.SEER_ACTION);
+        verify(nightActionService).processNextAiNightAction(roomId, 1, GamePhase.WITCH_ACTION);
         verify(nightActionService).resolveNightActions(roomId, 1);
     }
 }

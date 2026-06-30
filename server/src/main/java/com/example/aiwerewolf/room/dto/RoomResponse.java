@@ -18,6 +18,8 @@ public record RoomResponse(
         ObserverViewMode observerViewMode,
         Instant createdAt,
         Instant updatedAt,
+        int aiThinkingDelayMillis,
+        boolean autoAdvance,
         @Nullable String godViewToken
 ) {
 }

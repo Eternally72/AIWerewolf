@@ -1,5 +1,5 @@
 <template>
-  <main class="page landing" :style="{ '--landing-bg': `url(${backgroundAssets.landing})` }">
+  <main class="page landing">
     <section class="shell hero">
       <div>
         <p class="eyebrow">Multi-Agent Hidden Role Game</p>
@@ -21,9 +21,6 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { backgroundAssets } from '../assets'
-
 const lastRoom = localStorage.getItem('lastRoomId')
 const lastRoomPath = lastRoom ? `/rooms/${lastRoom}/game` : '/create'
 const features = [
@@ -31,43 +28,13 @@ const features = [
   { title: '全 AI 对局', text: 'Mock LLM 无需密钥也能自动发言、行动、投票。' },
   { title: '实时观战', text: 'REST 恢复状态，WebSocket 推送阶段和时间线。' }
 ]
-
-onMounted(() => {
-  preloadImage(backgroundAssets.landing)
-  requestIdle(() => preloadImage(backgroundAssets.table))
-})
-
-function preloadImage(src: string) {
-  const image = new Image()
-  image.decoding = 'async'
-  image.src = src
-}
-
-function requestIdle(task: () => void) {
-  const requestIdleCallback = (globalThis as typeof globalThis & {
-    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
-  }).requestIdleCallback
-  if (requestIdleCallback) {
-    requestIdleCallback(task, { timeout: 1500 })
-    return
-  }
-  globalThis.setTimeout(task, 400)
-}
 </script>
 
 <style scoped>
 .landing {
   display: grid;
   align-items: center;
-  position: relative;
-  isolation: isolate;
-  background:
-    linear-gradient(90deg, rgba(5, 8, 18, 0.88), rgba(8, 11, 24, 0.62) 48%, rgba(8, 11, 24, 0.94)),
-    var(--landing-bg),
-    radial-gradient(circle at 70% 12%, rgba(219, 231, 255, 0.24), transparent 9rem),
-    linear-gradient(135deg, #060914 0%, #10172a 48%, #1b1025 100%);
-  background-size: cover;
-  background-position: center;
+  background: #080b14;
 }
 .hero {
   display: grid;

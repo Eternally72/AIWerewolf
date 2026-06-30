@@ -70,18 +70,35 @@ public class VoteService {
         return saveVote(roomId, round, playerId, request.targetPlayerId(), request.reason());
     }
 
-    public void generateAiVotes(String roomId, int round) {
-        for (PlayerEntity player : playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId)) {
-            if (player.getType() != PlayerType.AI || !player.isCanVote()) {
+    public boolean processNextAiVote(String roomId, int round) {
+        List<PlayerEntity> voters = playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId).stream()
+                .filter(PlayerEntity::isCanVote)
+                .toList();
+        for (PlayerEntity player : voters) {
+            if (voteRepository.findByRoomIdAndRoundNumberAndVoterPlayerId(roomId, round, player.getId()).isPresent()) {
                 continue;
             }
-            AiVoteDecision decision = agentTaskService.submitAndAwait(
+            // 投票顺序与发言顺序一致，每次推进只允许一个 Agent 做出私密决策。
+            if (player.getType() != PlayerType.AI) {
+                return false;
+            }
+            AiVoteDecision decision = agentTaskService.execute(
                     new AgentTaskRequest(roomId, player.getId(), round, GamePhase.DAY_VOTE, AgentRunPurpose.VOTE),
                     () -> aiAgentService.decideVote(player.getId(), gameViewBuilder.buildPrivateView(roomId, player.getId())));
             if (decision.targetPlayerId() != null) {
                 saveVote(roomId, round, player.getId(), decision.targetPlayerId(), decision.reason());
             }
+            memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_VOTE, "VOTE_TURN_COMPLETED",
+                    playerLabel(roomId, player.getId()) + " 已完成投票，目标将在结算时公开");
+            return votesComplete(roomId, round, voters);
         }
+        return true;
+    }
+
+    private boolean votesComplete(String roomId, int round, List<PlayerEntity> voters) {
+        return voters.stream().allMatch(player -> voteRepository
+                .findByRoomIdAndRoundNumberAndVoterPlayerId(roomId, round, player.getId())
+                .isPresent());
     }
 
     public Optional<String> calculateVoteResult(String roomId, int round) {

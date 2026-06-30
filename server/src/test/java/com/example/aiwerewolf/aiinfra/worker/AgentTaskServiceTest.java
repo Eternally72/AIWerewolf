@@ -8,8 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -18,33 +16,32 @@ import static org.mockito.Mockito.when;
 
 class AgentTaskServiceTest {
     @Test
-    void submitAndAwaitTracksTaskLifecycleAndMetrics() {
+    void executeRunsSynchronouslyAndTracksTaskLifecycleAndMetrics() {
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-        ExecutorService executor = Executors.newSingleThreadExecutor();
         AgentTaskRepository repository = repository();
         AgentTaskService service = new AgentTaskService(
-                executor,
                 repository,
-                new AiInfraMetrics(meterRegistry),
-                3);
+                new AiInfraMetrics(meterRegistry));
+        Thread callerThread = Thread.currentThread();
+        AtomicReference<Thread> executionThread = new AtomicReference<>();
 
-        try {
-            String result = service.submitAndAwait(
-                    new AgentTaskRequest("room-1", "player-1", 1, GamePhase.DAY_VOTE, AgentRunPurpose.VOTE),
-                    () -> "ok");
+        String result = service.execute(
+                new AgentTaskRequest("room-1", "player-1", 1, GamePhase.DAY_VOTE, AgentRunPurpose.VOTE),
+                () -> {
+                    executionThread.set(Thread.currentThread());
+                    return "ok";
+                });
 
-            assertThat(result).isEqualTo("ok");
-            assertThat(service.listRecentForRoom("room-1"))
-                    .singleElement()
-                    .satisfies(task -> {
-                        assertThat(task.status()).isEqualTo(AgentTaskStatus.SUCCEEDED);
-                        assertThat(task.purpose()).isEqualTo(AgentRunPurpose.VOTE);
-                    });
-            assertThat(meterRegistry.counter("aiwerewolf.agent.tasks", "purpose", "vote", "status", "queued").count()).isEqualTo(1.0);
-            assertThat(meterRegistry.counter("aiwerewolf.agent.tasks", "purpose", "vote", "status", "succeeded").count()).isEqualTo(1.0);
-        } finally {
-            executor.shutdownNow();
-        }
+        assertThat(result).isEqualTo("ok");
+        assertThat(executionThread.get()).isSameAs(callerThread);
+        assertThat(service.listRecentForRoom("room-1"))
+                .singleElement()
+                .satisfies(task -> {
+                    assertThat(task.status()).isEqualTo(AgentTaskStatus.SUCCEEDED);
+                    assertThat(task.purpose()).isEqualTo(AgentRunPurpose.VOTE);
+                });
+        assertThat(meterRegistry.counter("aiwerewolf.agent.tasks", "purpose", "vote", "status", "queued").count()).isEqualTo(1.0);
+        assertThat(meterRegistry.counter("aiwerewolf.agent.tasks", "purpose", "vote", "status", "succeeded").count()).isEqualTo(1.0);
     }
 
     private AgentTaskRepository repository() {

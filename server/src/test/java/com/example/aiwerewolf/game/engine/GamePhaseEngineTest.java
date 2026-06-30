@@ -61,6 +61,50 @@ class GamePhaseEngineTest {
     }
 
     @Test
+    void oneAdvanceProcessesOnlyOneAiSpeechAndKeepsPhaseUntilAllSpeakersFinish() {
+        String roomId = "room";
+        RoomEntity room = TestFixtures.room(roomId);
+        room.setPhase(GamePhase.DAY_SPEECH);
+        PlayerEntity first = TestFixtures.player("p1", roomId, 1, Role.VILLAGER);
+        PlayerEntity second = TestFixtures.player("p2", roomId, 2, Role.SEER);
+        RoomRepository roomRepository = mock(RoomRepository.class);
+        PlayerRepository playerRepository = mock(PlayerRepository.class);
+        SpeechService speechService = mock(SpeechService.class);
+        PhaseAdvanceLockService lockService = mock(PhaseAdvanceLockService.class);
+
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(room));
+        when(roomRepository.save(any(RoomEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId)).thenReturn(List.of(first, second));
+        when(speechService.processNextAiSpeech(roomId, 1)).thenReturn(false);
+        when(lockService.withRoomLock(eq(roomId), any())).thenAnswer(invocation -> {
+            Supplier<?> supplier = invocation.getArgument(1);
+            return supplier.get();
+        });
+
+        GamePhaseEngine engine = new GamePhaseEngine(
+                roomRepository,
+                playerRepository,
+                mock(GameActionRepository.class),
+                mock(SpeechRepository.class),
+                mock(VoteRepository.class),
+                mock(NightActionService.class),
+                speechService,
+                mock(VoteService.class),
+                mock(DeathResolutionService.class),
+                new VictoryConditionService(),
+                mock(MemoryService.class),
+                lockService,
+                mock(IdempotencyService.class),
+                mock(GameRuntimeStateCache.class),
+                new AiInfraMetrics(new SimpleMeterRegistry()));
+
+        RoomEntity result = engine.advancePhase(roomId);
+
+        assertThat(result.getPhase()).isEqualTo(GamePhase.DAY_SPEECH);
+        verify(speechService, times(1)).processNextAiSpeech(roomId, 1);
+    }
+
+    @Test
     void autoAdvanceSkipsNightRolePhaseWhenNoAliveActorExists() {
         String roomId = "room";
         RoomEntity room = TestFixtures.room(roomId);
@@ -83,6 +127,7 @@ class GamePhaseEngineTest {
         when(playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId)).thenReturn(List.of(humanVillager, wolf, seer));
         when(playerRepository.findByRoomIdOrderBySeatNumberAsc(roomId)).thenReturn(List.of(humanVillager, wolf, seer, deadWitch));
         when(idempotencyService.markIfAbsent(anyString(), any(Duration.class))).thenReturn(true);
+        when(nightActionService.processNextAiNightAction(eq(roomId), eq(1), any(GamePhase.class))).thenReturn(true);
         when(lockService.withRoomLock(eq(roomId), any())).thenAnswer(invocation -> {
             Supplier<?> supplier = invocation.getArgument(1);
             return supplier.get();
@@ -109,8 +154,8 @@ class GamePhaseEngineTest {
         RoomEntity result = engine.advanceUntilHumanInputRequired(roomId);
 
         assertThat(result.getPhase()).isEqualTo(GamePhase.DAY_SPEECH);
-        verify(nightActionService).generateAiNightActions(roomId, 1, GamePhase.SEER_ACTION);
-        verify(nightActionService, never()).generateAiNightActions(roomId, 1, GamePhase.WITCH_ACTION);
+        verify(nightActionService).processNextAiNightAction(roomId, 1, GamePhase.SEER_ACTION);
+        verify(nightActionService, never()).processNextAiNightAction(roomId, 1, GamePhase.WITCH_ACTION);
     }
 
     @Test
@@ -125,6 +170,7 @@ class GamePhaseEngineTest {
         RoomRepository roomRepository = mock(RoomRepository.class);
         PlayerRepository playerRepository = mock(PlayerRepository.class);
         GameActionRepository gameActionRepository = mock(GameActionRepository.class);
+        NightActionService nightActionService = mock(NightActionService.class);
         PhaseAdvanceLockService lockService = mock(PhaseAdvanceLockService.class);
         IdempotencyService idempotencyService = mock(IdempotencyService.class);
 
@@ -135,6 +181,7 @@ class GamePhaseEngineTest {
         when(gameActionRepository.existsByRoomIdAndRoundNumberAndPhaseAndActorPlayerId(roomId, 1, GamePhase.WITCH_ACTION, "human-witch"))
                 .thenReturn(true);
         when(idempotencyService.markIfAbsent(anyString(), any(Duration.class))).thenReturn(true);
+        when(nightActionService.processNextAiNightAction(roomId, 1, GamePhase.WITCH_ACTION)).thenReturn(true);
         when(lockService.withRoomLock(eq(roomId), any())).thenAnswer(invocation -> {
             Supplier<?> supplier = invocation.getArgument(1);
             return supplier.get();
@@ -146,7 +193,7 @@ class GamePhaseEngineTest {
                 gameActionRepository,
                 mock(SpeechRepository.class),
                 mock(VoteRepository.class),
-                mock(NightActionService.class),
+                nightActionService,
                 mock(SpeechService.class),
                 mock(VoteService.class),
                 mock(DeathResolutionService.class),

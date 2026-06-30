@@ -249,7 +249,7 @@ class RoomControllerApiTest {
     private RoomResponse roomResponse(GamePhase phase, RoomStatus status, String token) {
         Instant now = Instant.now();
         return new RoomResponse("room-1", "room", status, phase, 7,
-                HumanMode.NONE, ObserverViewMode.GOD_VIEW, now, now, token);
+                HumanMode.NONE, ObserverViewMode.GOD_VIEW, now, now, 1200, true, token);
     }
 
     private RoomEntity roomEntity(GamePhase phase, RoomStatus status) {
@@ -275,7 +275,7 @@ class RoomControllerApiTest {
                   "specifiedHumanRole":null,
                   "observerViewMode":"GOD_VIEW",
                   "roleConfig":{"werewolfCount":2,"wolfKingCount":0,"whiteWolfKingCount":0,"hiddenWolfCount":0,"villagerCount":3,"seerCount":1,"witchCount":1,"hunterCount":0,"guardCount":0,"idiotCount":0,"knightCount":0,"graveKeeperCount":0,"magicianCount":0,"cupidCount":0,"elderCount":0},
-                  "ruleConfig":{"victoryRule":"SLAUGHTER_SIDE","enableSheriff":false,"enableLastWords":true,"allowWitchSaveSelfFirstNight":true,"allowHunterShootWhenPoisoned":false,"allowGuardProtectSameTargetConsecutively":false,"allowWerewolfNightChat":true,"allowWhiteWolfKingExplode":true,"enableLovers":false,"speechTimeLimitSeconds":90,"voteTimeLimitSeconds":45,"nightActionTimeLimitSeconds":45,"aiThinkingDelayMillis":0,"autoAdvance":false,"revealRoleOnDeath":false},
+                  "ruleConfig":{"victoryRule":"SLAUGHTER_SIDE","enableSheriff":false,"enableLastWords":true,"allowWitchSaveSelfFirstNight":true,"allowHunterShootWhenPoisoned":false,"allowGuardProtectSameTargetConsecutively":false,"allowWerewolfNightChat":true,"allowWhiteWolfKingExplode":true,"enableLovers":false,"speechTimeLimitSeconds":90,"voteTimeLimitSeconds":45,"nightActionTimeLimitSeconds":45,"aiThinkingDelayMillis":1200,"autoAdvance":false,"revealRoleOnDeath":false},
                   "uiConfig":{"theme":"dark-moon","animationLevel":"smooth","enableSoundEffect":false,"showRoleAvatar":true,"showTimeline":true,"showGodViewPanel":true}
                 }
                 """;

@@ -4,6 +4,7 @@ import com.example.aiwerewolf.aiinfra.gateway.LlmGateway;
 import com.example.aiwerewolf.aiinfra.gateway.ModelCallRequest;
 import com.example.aiwerewolf.aiinfra.gateway.ModelCallResponse;
 import com.example.aiwerewolf.aiinfra.prompt.PromptBundle;
+import com.example.aiwerewolf.aiinfra.prompt.AgentPromptContext;
 import com.example.aiwerewolf.aiinfra.prompt.PromptRegistry;
 import com.example.aiwerewolf.aiinfra.run.AgentRunPurpose;
 import com.example.aiwerewolf.aiinfra.run.AgentRunRecord;
@@ -107,12 +108,14 @@ public class AiAgentService {
             if (decisionParser.hasJson(lastResponse)) {
                 return new AgentCallResult(lastResponse, providerName, modelName,
                         providerFallbackUsed, providerAttemptCount, modelLatencyMillis, errorMessage,
-                        prompt.rolePromptVersion(), prompt.taskPromptVersion(), prompt.outputSchemaVersion());
+                        prompt.rolePromptVersion(), prompt.taskPromptVersion(), prompt.outputSchemaVersion(),
+                        prompt.inputContext());
             }
         }
         return new AgentCallResult(lastResponse, providerName, modelName,
                 providerFallbackUsed, providerAttemptCount, modelLatencyMillis, errorMessage,
-                prompt.rolePromptVersion(), prompt.taskPromptVersion(), prompt.outputSchemaVersion());
+                prompt.rolePromptVersion(), prompt.taskPromptVersion(), prompt.outputSchemaVersion(),
+                prompt.inputContext());
     }
 
     private void recordRun(String agentId,
@@ -140,7 +143,7 @@ public class AiAgentService {
                 call.taskPromptVersion() + "/" + call.outputSchemaVersion(),
                 blankToDefault(call.providerName(), "unknown"),
                 blankToNull(call.modelName()),
-                privateGameView,
+                call.inputContext(),
                 call.rawOutput(),
                 parsedOutput,
                 errorMessage));
@@ -179,7 +182,8 @@ public class AiAgentService {
             @Nullable String errorMessage,
             String rolePromptVersion,
             String taskPromptVersion,
-            String outputSchemaVersion
+            String outputSchemaVersion,
+            AgentPromptContext inputContext
     ) {
     }
 }

@@ -9,9 +9,9 @@ import java.util.regex.Pattern;
 
 @Component
 public class MockModelProvider implements ModelProvider {
-    private static final Pattern AGENT_ID = Pattern.compile("agentId=([^\\n\\r]+)");
-    private static final Pattern PLAYER_ID = Pattern.compile("PlayerView\\[id=([^,]+)");
-    private static final Pattern OWN_ROLE = Pattern.compile("ownRole=([^,\\)]+)");
+    private static final Pattern AGENT_REF = Pattern.compile("agentRef=([^\\n\\r]+)");
+    private static final Pattern PLAYER_REF = Pattern.compile("\\\"playerRef\\\":\\\"(seat-[0-9]+)\\\"");
+    private static final Pattern OWN_ROLE = Pattern.compile("\\\"ownRole\\\":\\\"([^\\\"]+)\\\"");
 
     @Override
     public String name() {
@@ -30,22 +30,22 @@ public class MockModelProvider implements ModelProvider {
 
     @Override
     public String complete(String systemPrompt, String userPrompt) {
-        String agentId = extract(AGENT_ID, userPrompt, "mock-agent");
+        String agentRef = extract(AGENT_REF, userPrompt, "seat-0");
         String role = extract(OWN_ROLE, userPrompt, "UNKNOWN");
-        List<String> targets = targets(userPrompt, agentId);
-        String target = targets.isEmpty() ? "" : targets.get(Math.floorMod(agentId.hashCode(), targets.size()));
-        int variant = Math.floorMod((agentId + role).hashCode(), 6);
+        List<String> targets = targets(userPrompt, agentRef);
+        String target = targets.isEmpty() ? "" : targets.get(Math.floorMod(agentRef.hashCode(), targets.size()));
+        int variant = Math.floorMod((agentRef + role).hashCode(), 6);
 
-        if (userPrompt.contains("targetPlayerId") && userPrompt.contains("confidence")) {
+        if (userPrompt.contains("targetPlayerRef") && userPrompt.contains("confidence")) {
             return """
-                    {"targetPlayerId":"%s","reason":"我根据发言强度、存活位置和上一轮信息选择当前更可疑的目标。","confidence":0.%d}
+                    {"targetPlayerRef":"%s","reason":"我根据发言强度、存活位置和上一轮信息选择当前更可疑的目标。","confidence":0.%d}
                     """.formatted(escape(target), 55 + variant);
         }
-        if (userPrompt.contains("secondaryTargetPlayerId") || userPrompt.contains("actionType")) {
+        if (userPrompt.contains("secondaryTargetPlayerRef") || userPrompt.contains("actionType")) {
             String action = nightAction(role);
             String actionTarget = "NONE".equals(action) ? "" : target;
             return """
-                    {"actionType":"%s","targetPlayerId":"%s","secondaryTargetPlayerId":null,"reason":"Mock Agent 根据角色能力和当前可见信息选择行动。"}
+                    {"actionType":"%s","targetPlayerRef":"%s","secondaryTargetPlayerRef":null,"reason":"Mock Agent 根据角色能力和当前可见信息选择行动。"}
                     """.formatted(action, escape(actionTarget));
         }
         return """
@@ -91,12 +91,12 @@ public class MockModelProvider implements ModelProvider {
         return "NONE";
     }
 
-    private List<String> targets(String prompt, String agentId) {
-        Matcher matcher = PLAYER_ID.matcher(prompt);
+    private List<String> targets(String prompt, String agentRef) {
+        Matcher matcher = PLAYER_REF.matcher(prompt);
         List<String> ids = new ArrayList<>();
         while (matcher.find()) {
             String id = matcher.group(1).strip();
-            if (!id.equals(agentId) && !ids.contains(id)) {
+            if (!id.equals(agentRef) && !ids.contains(id)) {
                 ids.add(id);
             }
         }

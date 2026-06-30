@@ -77,7 +77,7 @@ class EvaluationRunnerTest {
     private RoomResponse roomResponse(String roomId) {
         Instant now = Instant.now();
         return new RoomResponse(roomId, "eval", RoomStatus.WAITING, GamePhase.WAITING, 7,
-                HumanMode.NONE, ObserverViewMode.GOD_VIEW, now, now, "token");
+                HumanMode.NONE, ObserverViewMode.GOD_VIEW, now, now, 1200, true, "token");
     }
 
     private RoomEntity gameOverRoom(String roomId) {

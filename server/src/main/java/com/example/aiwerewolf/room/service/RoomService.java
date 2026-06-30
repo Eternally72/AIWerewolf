@@ -8,6 +8,7 @@ import com.example.aiwerewolf.player.repository.PlayerRepository;
 import com.example.aiwerewolf.role.service.RoleAssignmentService;
 import com.example.aiwerewolf.room.dto.CreateRoomRequest;
 import com.example.aiwerewolf.room.dto.RoomResponse;
+import com.example.aiwerewolf.room.dto.RuleConfig;
 import com.example.aiwerewolf.room.entity.GameConfigEntity;
 import com.example.aiwerewolf.room.entity.RoomEntity;
 import com.example.aiwerewolf.room.entity.RoomStatus;
@@ -163,7 +164,19 @@ public class RoomService {
     }
 
     public RoomResponse toResponse(RoomEntity room, String godViewToken) {
+        RuleConfig rules = ruleConfig(room.getId());
         return new RoomResponse(room.getId(), room.getName(), room.getStatus(), room.getPhase(), room.getTotalSeats(),
-                room.getHumanMode(), room.getObserverViewMode(), room.getCreatedAt(), room.getUpdatedAt(), godViewToken);
+                room.getHumanMode(), room.getObserverViewMode(), room.getCreatedAt(), room.getUpdatedAt(),
+                rules.aiThinkingDelayMillis(), rules.autoAdvance(), godViewToken);
+    }
+
+    private RuleConfig ruleConfig(String roomId) {
+        GameConfigEntity config = gameConfigRepository.findByRoomId(roomId)
+                .orElseThrow(() -> new BusinessException("ROOM_NOT_FOUND", "房间配置不存在"));
+        try {
+            return objectMapper.readValue(config.getRuleConfigJson(), RuleConfig.class);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException("CONFIG_ERROR", "房间规则配置解析失败");
+        }
     }
 }

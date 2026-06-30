@@ -59,6 +59,8 @@ export type Room = {
   totalSeats: number
   humanMode: string
   observerViewMode: string
+  aiThinkingDelayMillis: number
+  autoAdvance: boolean
   godViewToken?: string | null
 }
 

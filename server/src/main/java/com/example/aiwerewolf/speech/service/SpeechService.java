@@ -62,15 +62,22 @@ public class SpeechService {
         return saveSpeech(roomId, round, playerId, request.content(), request.claimedRole());
     }
 
-    public void generateAiSpeech(String roomId, int round) {
-        for (PlayerEntity player : playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId)) {
-            if (player.getType() != PlayerType.AI) {
+    public boolean processNextAiSpeech(String roomId, int round) {
+        List<PlayerEntity> speakers = playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(roomId).stream()
+                .filter(PlayerEntity::isCanSpeak)
+                .toList();
+        for (PlayerEntity player : speakers) {
+            if (speechRepository.findByRoomIdAndRoundNumberAndPlayerId(roomId, round, player.getId()).isPresent()) {
                 continue;
+            }
+            // 严格按座位等待真人或处理一个 AI，保证后置位读取到前序发言后才开始思考。
+            if (player.getType() != PlayerType.AI) {
+                return false;
             }
             memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_SPEECH, "SPEECH_TURN_STARTED",
                     playerLabel(roomId, player.getId()) + " 正在思考发言",
                     speechTurnMetadata(player));
-            AiSpeechDecision decision = agentTaskService.submitAndAwait(
+            AiSpeechDecision decision = agentTaskService.execute(
                     new AgentTaskRequest(roomId, player.getId(), round, GamePhase.DAY_SPEECH, AgentRunPurpose.SPEECH),
                     () -> aiAgentService.generateSpeech(player.getId(), gameViewBuilder.buildPrivateView(roomId, player.getId())));
             saveSpeech(roomId, round, player.getId(), decision.speech(), parseRole(decision.claimedRole()));
@@ -80,7 +87,9 @@ public class SpeechService {
             memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_SPEECH, "SPEECH_TURN_COMPLETED",
                     playerLabel(roomId, player.getId()) + " 已完成发言",
                     speechTurnMetadata(player));
+            return speechesComplete(roomId, round, speakers);
         }
+        return true;
     }
 
     public List<SpeechEntity> listPublicSpeeches(String roomId) {
@@ -97,11 +106,18 @@ public class SpeechService {
                     speech.setContent(content);
                     speech.setClaimedRole(claimedRole);
                     speech.setPublicVisible(true);
-                    SpeechEntity saved = speechRepository.save(speech);
+                    // flush 后再构建下一位 Agent 的视角，避免同一推进事务内看不到刚完成的发言。
+                    SpeechEntity saved = speechRepository.saveAndFlush(speech);
                     memoryService.appendPublicMemory(roomId, round, GamePhase.DAY_SPEECH, "SPEECH",
                             playerLabel(roomId, playerId) + " 发言：" + content);
                     return saved;
                 });
+    }
+
+    private boolean speechesComplete(String roomId, int round, List<PlayerEntity> speakers) {
+        return speakers.stream().allMatch(player -> speechRepository
+                .findByRoomIdAndRoundNumberAndPlayerId(roomId, round, player.getId())
+                .isPresent());
     }
 
     private String playerLabel(String roomId, String playerId) {

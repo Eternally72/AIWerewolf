@@ -24,23 +24,29 @@ export async function createRoom(payload: unknown) {
   return data.data
 }
 
+export async function getRoom(roomId: string) {
+  const { data } = await http.get<ApiResponse<Room>>(`/api/rooms/${roomId}`)
+  return data.data
+}
+
 export async function startRoom(roomId: string) {
   const { data } = await http.post<ApiResponse<Room>>(`/api/rooms/${roomId}/start`)
   return data.data
 }
 
 export async function advanceRoom(roomId: string) {
-  const { data } = await http.post<ApiResponse<Room>>(`/api/rooms/${roomId}/advance`)
+  // 单步推进最多包含一次模型调用和一次格式重试，超时必须覆盖 Provider 的完整调用窗口。
+  const { data } = await http.post<ApiResponse<Room>>(`/api/rooms/${roomId}/advance`, null, { timeout: 90000 })
   return data.data
 }
 
 export async function autoAdvance(roomId: string) {
-  const { data } = await http.post<ApiResponse<Room>>(`/api/rooms/${roomId}/auto-advance`)
+  const { data } = await http.post<ApiResponse<Room>>(`/api/rooms/${roomId}/auto-advance`, null, { timeout: 600000 })
   return data.data
 }
 
 export async function simulateRoom(roomId: string) {
-  const { data } = await http.post<ApiResponse<Room>>(`/api/rooms/${roomId}/simulate`)
+  const { data } = await http.post<ApiResponse<Room>>(`/api/rooms/${roomId}/simulate`, null, { timeout: 600000 })
   return data.data
 }
 

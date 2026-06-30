@@ -34,7 +34,7 @@ class AiAgentServiceTest {
     private final AgentRunService agentRunService = mock(AgentRunService.class);
     private final AiAgentService service = new AiAgentService(
             new LlmGateway(new LlmProperties(), List.of(new MockModelProvider()), metrics(), observation()),
-            new PromptRegistry(),
+            new PromptRegistry(new ObjectMapper()),
             shortTermMemoryService,
             agentRunService,
             new AgentDecisionParser(new ObjectMapper()),

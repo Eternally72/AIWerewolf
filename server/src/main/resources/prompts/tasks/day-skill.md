@@ -2,6 +2,7 @@
 
 要求：
 - 没有足够把握时 `actionType` 使用 `NONE`。
+- `targetPlayerRef` 和 `secondaryTargetPlayerRef` 只能使用当前视角中的 `seat-N`；没有目标时使用 `null`。
 - 骑士只有在高度怀疑目标是狼人时发动 `DUEL`。
 - 白狼王只有在局势需要强行打开局面时发动 `EXPLODE_AND_KILL`。
 - 猎人死亡可开枪时优先选择最高嫌疑目标。

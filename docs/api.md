@@ -14,9 +14,9 @@
 - `POST /api/rooms/{roomId}/start` 开始游戏并分配身份。
 - `POST /api/rooms/{roomId}/pause` 暂停。
 - `POST /api/rooms/{roomId}/resume` 继续。
-- `POST /api/rooms/{roomId}/advance` 推进一个阶段。
+- `POST /api/rooms/{roomId}/advance` 推进一个游戏步骤。需要模型决策时，每次最多处理一个 Agent；阶段内所有玩家完成后才切换阶段。
 - `POST /api/rooms/{roomId}/auto-advance` 推进到下一个真人操作节点。
-- `POST /api/rooms/{roomId}/simulate` 一键模拟到游戏结束，主要用于全 AI 观战和 GodView 控制台。服务端最多推进 200 步，达到上限仍未结束会返回 `SIMULATION_LIMIT_REACHED`。
+- `POST /api/rooms/{roomId}/simulate` 一键模拟到游戏结束，主要用于测试和快速评测。服务端最多推进 1000 步，达到上限仍未结束会返回 `SIMULATION_LIMIT_REACHED`。
 
 ## 视角
 
@@ -24,7 +24,7 @@
 - `GET /api/rooms/{roomId}/players/{playerId}/private-view`
 - `GET /api/rooms/{roomId}/god-view`
 - `GET /api/rooms/{roomId}/agent-runs` 查询最近 100 条 AI 决策运行记录，需要 GodView 令牌。
-- `GET /api/rooms/{roomId}/agent-tasks` 查询最近 100 条 AI Worker 任务状态，需要 GodView 令牌。
+- `GET /api/rooms/{roomId}/agent-tasks` 查询最近 100 条 AI 决策任务状态，需要 GodView 令牌。
 
 GodView 必须携带创建房间时返回的主持人令牌：
 

@@ -14,7 +14,10 @@
             {{ refreshing ? '同步中...' : '刷新' }}
           </button>
           <button class="btn secondary" :disabled="refreshing || advancing" @click="advance">
-            {{ advancing ? '推进中...' : '自动推进' }}
+            {{ advancing ? 'Agent 思考中...' : '单步推进' }}
+          </button>
+          <button class="btn secondary" :class="{ active: autoPlaying }" :disabled="isGameOver" @click="toggleAutoPlay">
+            {{ autoPlaying ? '暂停自动播放' : '开始自动播放' }}
           </button>
           <RouterLink class="btn" :to="`/rooms/${roomId}/god`">上帝视角</RouterLink>
           <RouterLink v-if="isGameOver" class="btn secondary" :to="`/rooms/${roomId}/over`">结算页</RouterLink>
@@ -23,8 +26,7 @@
 
       <aside class="player-rail left-rail">
         <article v-for="player in leftPlayers" :key="player.id" class="player-chip" :class="playerClass(player)">
-          <img v-if="roleAsset(player.role)" class="role-token" :src="roleAsset(player.role) ?? ''" :alt="roleName(player.role)" />
-          <b v-else>{{ player.seatNumber }}</b>
+          <b>{{ player.seatNumber }}</b>
           <div>
             <strong>{{ player.name }}</strong>
             <span>{{ player.alive ? '存活' : '死亡' }} · {{ publicRoleText(player.role) }}</span>
@@ -36,18 +38,18 @@
         <div class="phase-panel">
           <span>{{ phaseName(view?.phase) }}</span>
           <strong>{{ phaseHint }}</strong>
-          <em v-if="currentSpeechTurn">{{ currentSpeechTurn }} 正在组织发言...</em>
+          <em v-if="advancing">{{ pendingActorText }} 正在思考，完成后将按顺序播放结果...</em>
+          <em v-else-if="currentSpeechTurn">{{ currentSpeechTurn }} 正在组织发言...</em>
+          <em v-else-if="playbackStatus">{{ playbackStatus }}</em>
         </div>
 
-        <VirtualList v-if="arenaEvents.length" class="event-stream" :items="arenaEvents" :item-height="92" key-field="id">
-          <template #default="{ item }">
-            <article class="event-card" :class="`event-${item.kind}`">
-              <small>{{ item.meta }}</small>
-              <strong>{{ item.title }}</strong>
-              <p>{{ renderedEventContent(item) }}<i v-if="isEventStreaming(item.id)" class="typing-cursor" /></p>
-            </article>
-          </template>
-        </VirtualList>
+        <div v-if="arenaEvents.length" class="event-stream">
+          <article v-for="item in arenaEvents" :key="item.id" class="event-card" :class="`event-${item.kind}`">
+            <small>{{ item.meta }}</small>
+            <strong>{{ item.title }}</strong>
+            <p>{{ renderedEventContent(item) }}<i v-if="isEventStreaming(item.id)" class="typing-cursor" /></p>
+          </article>
+        </div>
         <div v-else class="empty-state">
           <strong>对局正在准备</strong>
           <span>点击自动推进后，Agent 的行动、发言和公开结算会在这里流式呈现。</span>
@@ -56,8 +58,7 @@
 
       <aside class="player-rail right-rail">
         <article v-for="player in rightPlayers" :key="player.id" class="player-chip" :class="playerClass(player)">
-          <img v-if="roleAsset(player.role)" class="role-token" :src="roleAsset(player.role) ?? ''" :alt="roleName(player.role)" />
-          <b v-else>{{ player.seatNumber }}</b>
+          <b>{{ player.seatNumber }}</b>
           <div>
             <strong>{{ player.name }}</strong>
             <span>{{ player.alive ? '存活' : '死亡' }} · {{ publicRoleText(player.role) }}</span>
@@ -119,11 +120,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getPrivateView, submitNightAction, submitSpeech, submitVote } from '../api/client'
-import { roleAsset } from '../assets'
-import VirtualList from '../components/VirtualList.vue'
 import { campName, phaseName, playerLabel, replacePlayerIds, roleName, statusText } from '../game/gameLabels'
 import { useGameStore } from '../stores/game'
 import { connectGameSocket } from '../websocket/gameSocket'
@@ -203,6 +202,14 @@ const currentSpeechTurn = computed(() => {
   const seat = metadata.seatNumber ? `${metadata.seatNumber} 号 ` : ''
   return `${seat}${metadata.playerName ?? 'Agent'}`
 })
+const pendingActorText = computed(() => {
+  if (view.value?.phase !== 'DAY_SPEECH') return '当前 Agent'
+  const spokenIds = new Set(speeches.value
+    .filter(speech => speech.roundNumber === view.value?.roundNumber)
+    .map(speech => speech.playerId))
+  const pending = alivePlayers.value.find(player => player.canSpeak && !spokenIds.has(player.id))
+  return pending ? `${pending.seatNumber} 号 ${pending.name}` : '当前 Agent'
+})
 const actionOptions = computed(() => {
   const role = privateView.value?.ownRole ?? selectedActor.value?.role
   if (role === 'SEER') return [{ value: 'CHECK', label: '查验' }, { value: 'NONE', label: '无行动' }]
@@ -221,6 +228,8 @@ const actionType = ref('KILL')
 const actionTargetId = ref('')
 const refreshing = ref(false)
 const advancing = ref(false)
+const autoPlaying = ref(false)
+const playbackStatus = ref('')
 const streamedContentById = ref<Record<string, string>>({})
 const streamingEventId = ref<string | null>(null)
 const streamQueue: ArenaEvent[] = []
@@ -228,15 +237,21 @@ let streamInitialized = false
 let streamTimer: number | null = null
 let streamRunning = false
 let disconnect: null | (() => void) = null
+let autoPlayTimer: number | null = null
 
 onMounted(async () => {
   await reload()
+  initializeRenderedEvents()
   actorId.value = alivePlayers.value[0]?.id ?? ''
   disconnect = connectGameSocket(roomId.value, handleSocketMessage)
+  if (store.room?.autoAdvance && !players.value.some(player => player.type === 'HUMAN') && !isGameOver.value) {
+    toggleAutoPlay()
+  }
 })
 onUnmounted(() => {
   disconnect?.()
   if (streamTimer !== null) window.clearTimeout(streamTimer)
+  if (autoPlayTimer !== null) window.clearTimeout(autoPlayTimer)
 })
 
 watch(actorId, async value => {
@@ -261,6 +276,7 @@ watch(actionOptions, options => {
 })
 
 watch(arenaEvents, events => {
+  if (!streamInitialized) return
   const nextState: Record<string, string> = {}
   const existingIds = new Set(events.map(event => event.id))
   for (const event of events) {
@@ -269,20 +285,20 @@ watch(arenaEvents, events => {
       nextState[event.id] = previous
       continue
     }
-    if (!streamInitialized) {
-      nextState[event.id] = event.content
-      continue
-    }
     nextState[event.id] = ''
     streamQueue.push(event)
   }
   streamedContentById.value = nextState
-  streamInitialized = true
   while (streamQueue.length && !existingIds.has(streamQueue[0].id)) {
     streamQueue.shift()
   }
   drainStreamQueue()
-}, { immediate: true })
+})
+
+function initializeRenderedEvents() {
+  streamedContentById.value = Object.fromEntries(arenaEvents.value.map(event => [event.id, event.content]))
+  streamInitialized = true
+}
 
 async function reload() {
   if (refreshing.value) return
@@ -299,20 +315,85 @@ async function reload() {
 
 function handleSocketMessage(payload?: unknown) {
   if (store.applySocketPayload(payload)) return
+  // 当前推进请求结束后会主动恢复完整视图，忽略期间的失效通知可避免重复 REST 拉取。
+  if (advancing.value) return
   reload()
 }
 
 async function advance() {
   if (advancing.value) return
+  const before = viewSignature()
   advancing.value = true
   try {
-    await store.auto(roomId.value)
+    await store.advanceStep(roomId.value)
+    await nextTick()
     store.error = ''
+    if (before === viewSignature() && !isGameOver.value) {
+      playbackStatus.value = '当前阶段正在等待真人玩家操作。'
+      stopAutoPlay()
+    } else {
+      playbackStatus.value = ''
+    }
   } catch (error) {
     store.error = error instanceof Error ? error.message : '自动推进失败'
+    stopAutoPlay()
   } finally {
     advancing.value = false
   }
+}
+
+function toggleAutoPlay() {
+  if (autoPlaying.value) {
+    stopAutoPlay()
+    return
+  }
+  autoPlaying.value = true
+  playbackStatus.value = '自动播放已启动。'
+  scheduleAutoAdvance(0)
+}
+
+function scheduleAutoAdvance(delay = autoStepDelay()) {
+  if (!autoPlaying.value || isGameOver.value) {
+    stopAutoPlay()
+    return
+  }
+  if (autoPlayTimer !== null) window.clearTimeout(autoPlayTimer)
+  autoPlayTimer = window.setTimeout(async () => {
+    autoPlayTimer = null
+    await waitForPlayback()
+    if (!autoPlaying.value) return
+    await advance()
+    if (autoPlaying.value) scheduleAutoAdvance()
+  }, delay)
+}
+
+function autoStepDelay() {
+  const configured = store.room?.aiThinkingDelayMillis ?? 1200
+  return Math.max(700, Math.min(5000, configured))
+}
+
+function stopAutoPlay() {
+  autoPlaying.value = false
+  if (autoPlayTimer !== null) {
+    window.clearTimeout(autoPlayTimer)
+    autoPlayTimer = null
+  }
+}
+
+async function waitForPlayback() {
+  while (streamRunning || streamQueue.length > 0) {
+    await new Promise(resolve => window.setTimeout(resolve, 80))
+  }
+}
+
+function viewSignature() {
+  return [
+    view.value?.phase,
+    view.value?.roundNumber,
+    memories.value.length,
+    speeches.value.length,
+    view.value?.votes.length
+  ].join(':')
 }
 
 async function sendSpeech() {
@@ -402,7 +483,7 @@ function drainStreamQueue() {
   streamRunning = true
   streamingEventId.value = event.id
   const characters = Array.from(event.content)
-  const chunkSize = event.kind === 'speech' ? 2 : 4
+  const chunkSize = event.kind === 'speech' ? 1 : 4
   let cursor = 0
 
   const step = () => {
@@ -412,7 +493,7 @@ function drainStreamQueue() {
       [event.id]: characters.slice(0, cursor).join('')
     }
     if (cursor < characters.length) {
-      streamTimer = window.setTimeout(step, event.kind === 'speech' ? 18 : 12)
+      streamTimer = window.setTimeout(step, event.kind === 'speech' ? 28 : 12)
       return
     }
     streamRunning = false
@@ -428,9 +509,7 @@ function drainStreamQueue() {
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(30, 64, 175, 0.24), transparent 30rem),
-    linear-gradient(145deg, #06111f, #100b18 58%, #07121e);
+  background: #080b14;
 }
 .arena-shell {
   width: min(1740px, calc(100vw - clamp(20px, 3vw, 56px)));
@@ -492,15 +571,7 @@ function drainStreamQueue() {
   display: grid;
   place-items: center;
   color: #f8fbff;
-  background: linear-gradient(135deg, #334155, #4338ca);
-}
-.role-token {
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  object-fit: cover;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(232, 238, 255, 0.24);
+  background: #3730a3;
 }
 .player-chip div {
   min-width: 0;
@@ -528,7 +599,6 @@ function drainStreamQueue() {
 }
 .player-chip.dead {
   opacity: 0.46;
-  filter: grayscale(1);
 }
 .arena-center,
 .control-panel {
@@ -570,12 +640,8 @@ function drainStreamQueue() {
 .event-stream {
   min-height: 0;
   height: 100%;
-  max-height: none;
+  overflow-y: auto;
   scrollbar-gutter: stable;
-}
-.event-stream :deep(.virtual-list) {
-  height: 100%;
-  max-height: none;
   overscroll-behavior: contain;
 }
 .event-card {
@@ -583,6 +649,8 @@ function drainStreamQueue() {
   padding: 12px 14px;
   display: grid;
   gap: 6px;
+  content-visibility: auto;
+  contain-intrinsic-size: 92px;
 }
 .event-card small {
   color: #9ca8c7;

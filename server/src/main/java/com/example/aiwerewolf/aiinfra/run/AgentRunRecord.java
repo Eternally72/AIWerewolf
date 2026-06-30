@@ -1,7 +1,6 @@
 package com.example.aiwerewolf.aiinfra.run;
 
 import com.example.aiwerewolf.game.phase.GamePhase;
-import com.example.aiwerewolf.game.view.GameView;
 import org.springframework.lang.Nullable;
 
 public record AgentRunRecord(
@@ -19,7 +18,7 @@ public record AgentRunRecord(
         String taskPromptVersion,
         String modelProvider,
         @Nullable String modelName,
-        GameView inputViewSnapshot,
+        Object inputViewSnapshot,
         @Nullable String rawOutput,
         @Nullable Object parsedOutput,
         @Nullable String errorMessage

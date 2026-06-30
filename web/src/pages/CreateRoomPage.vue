@@ -35,6 +35,16 @@
           </label>
         </section>
 
+        <section class="pace-settings">
+          <label class="label">Agent 步骤间隔（毫秒）
+            <input v-model.number="form.ruleConfig.aiThinkingDelayMillis" class="input" type="number" min="700" max="5000" step="100" />
+          </label>
+          <label class="toggle-label">
+            <input v-model="form.ruleConfig.autoAdvance" type="checkbox" />
+            全 AI 对局进入游戏后自动播放
+          </label>
+        </section>
+
         <p class="error" v-if="validation">{{ validation }}</p>
         <p class="error" v-if="store.error">{{ store.error }}</p>
         <div class="actions">
@@ -125,6 +135,19 @@ header p {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
 }
+.pace-settings {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(260px, 1fr);
+  gap: 16px;
+  align-items: end;
+}
+.toggle-label {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #cbd5e1;
+}
 .error {
   color: #fecaca;
 }
@@ -132,5 +155,10 @@ header p {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+@media (max-width: 720px) {
+  .pace-settings {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

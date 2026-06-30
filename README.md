@@ -15,8 +15,9 @@ AI Werewolf 是一个 Java 21 + Spring Boot + Vue 3 的多 Agent 狼人杀项目
 - 信息隔离：所有外部输出由 `GameViewBuilder` 构建，禁止把完整真相直接给普通玩家或 AI。
 - 角色 Prompt：每个角色都有独立系统提示词，位于 `server/src/main/resources/prompts/roles/`。
 - 实时游戏：REST 恢复状态，WebSocket/STOMP 推送阶段、时间线和公共事件。
-- AI Infra：多模型网关支持 Mock、百炼、DeepSeek、智谱和通用 OpenAI-compatible Provider；`AgentRun` 记录模型输入输出和 fallback，`AgentTask` 持久化 Worker 任务状态，`GameEvent` 支持公开和 GodView 回放。
-- 前端操作：游戏桌支持玩家发言、投票、夜间行动；GodView 展示身份、AgentRun、AgentTask 和事件回放。
+- AI Infra：多模型网关支持 Mock、百炼、DeepSeek、智谱和通用 OpenAI-compatible Provider；`AgentRun` 记录模型输入输出和 fallback，`AgentTask` 持久化决策任务状态，`GameEvent` 支持公开和 GodView 回放。
+- 顺序博弈：每次推进最多调用一个 Agent，后置位必须在前序发言持久化后才能读取上下文并开始思考。
+- 轻量前端：使用纯 CSS 和文本渲染座位、发言流、事件、上帝视角与赛后明牌，不加载背景图、头像或角色图片。
 - 可开源：默认 Mock LLM，真实密钥只从环境变量读取。
 - 可扩展：角色能力接口、状态机、记忆作用域和默认模板均可继续扩展。
 
@@ -119,7 +120,7 @@ curl -X POST http://localhost:8080/api/rooms \
 
 创建房间响应会返回一次性的 `godViewToken`。前端会保存到本地并通过 `X-God-View-Token` 请求头访问 GodView；普通请求不再支持 `?god=true`。
 
-全 AI 观战可调用 `POST /api/rooms/{roomId}/simulate` 一键模拟到游戏结束；真人参与时，`/auto-advance` 会停在真人当前角色真正能操作的阶段。
+游戏页的自动播放会逐次调用 `POST /api/rooms/{roomId}/advance`，等待当前发言逐字播放完成并按 `aiThinkingDelayMillis` 停顿后，再调用下一位 Agent。`/simulate` 保留给测试和快速评测；真人参与时，`/auto-advance` 会停在真人当前角色真正能操作的阶段。
 
 ## 默认模板
 
@@ -142,7 +143,6 @@ CI 默认使用 Mock LLM，不依赖真实密钥。
 - 多真人联机权限系统。
 - 更完整的复杂角色结算。
 - 回放系统和对局报告。
-- Redis Stream / MQ 式 Agent Worker 投递层。
 - 排行榜和 Agent 个性编辑器。
 - 移动端深度适配。
 

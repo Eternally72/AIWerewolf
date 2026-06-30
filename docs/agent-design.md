@@ -170,30 +170,28 @@ aiwerewolf.evaluation.duration
 
 `AiInfraObservation` 提供 Micrometer Observation 包装层，目前用于模型网关调用。后续接入 OpenTelemetry/Zipkin/Tempo 时，可以在不重写业务代码的前提下扩展 trace 导出。
 
-## Agent Worker
+## Agent Task
 
-第七阶段新增 `AgentTaskService`，把 Agent 决策从业务服务中的直接调用升级为任务调度模型。当前采用“同阶段批量异步执行 + 阶段末同步收敛结果”的兼容模式：
+`AgentTaskService` 负责记录每次 Agent 决策的任务生命周期。为了保证狼人杀公开发言上下文严格有序，当前游戏主流程采用“单 Agent、单步骤、同步执行”模式：
 
 ```text
 GamePhaseEngine
   -> SpeechService / VoteService / NightActionService
-  -> AgentTaskService.submitHandle(...)
-  -> agentTaskExecutor
+  -> AgentTaskService.execute(...)
   -> AiAgentService
   -> LlmGateway
-  -> AgentTaskService.await(...)
 ```
 
-这样做的原因是：当前游戏状态机仍然需要在每个阶段结束前得到确定的 AI 决策，否则夜晚结算、投票放逐和胜负判断会变得不稳定。因此 Worker 会并发执行同一阶段内多个 Agent 的发言、投票和夜间行动决策，但最终写入发言、投票、行动记录时仍按座位顺序在主流程中串行收敛，保证状态机确定性。
+每次 `advance` 最多调用一个 Agent。当前 Agent 的发言、投票或行动持久化后，下一次推进才会构建后置 Agent 的私有视角。该约束避免后置 Agent 读取到空的 `speeches`，也防止多个模型并发决策时基于同一份过期上下文。
 
 典型流程：
 
 ```text
-1. 查询当前阶段可行动 AI 玩家。
-2. 批量提交 AgentTask 到 agentTaskExecutor。
-3. 多个 Agent 并发构建私有视角并调用 AiAgentService。
-4. 主流程按座位顺序 await 结果。
-5. 串行写入 Speech / Vote / GameAction，并进入阶段结算。
+1. 查询当前阶段按座位排序的待行动玩家。
+2. 如果当前轮到真人，暂停并等待前端提交。
+3. 如果当前轮到 AI，在当前推进线程中构建过滤后的私有视角。
+4. 同步调用 `AiAgentService` 并写入 Speech / Vote / GameAction。
+5. 当前阶段全部玩家完成后才进入阶段结算。
 ```
 
 任务状态包括：
@@ -201,7 +199,6 @@ GamePhaseEngine
 ```text
 QUEUED -> RUNNING -> SUCCEEDED
 QUEUED -> RUNNING -> FAILED
-QUEUED -> RUNNING -> TIMED_OUT
 ```
 
 最近 100 条房间任务可通过 GodView 令牌查询：
@@ -213,7 +210,7 @@ X-God-View-Token: <godViewToken>
 
 `AgentTask` 只记录任务调度元信息，例如任务 ID、房间、玩家、轮次、阶段、用途、状态和耗时；具体模型输入、输出、Prompt 版本和 fallback 原因仍由 `AgentRun` 负责记录。
 
-当前版本已经将 `AgentTask` 状态落库到 `agent_tasks` 表，服务重启后仍可通过 GodView 查询最近任务。JVM 内线程池只负责执行任务，不再作为任务审计事实来源。下一步如果要继续升级，可以把任务投递层替换为 Redis Stream、RocketMQ 或 Kafka，并让 `GamePhaseEngine` 通过事件回调推进阶段。
+当前版本已经将 `AgentTask` 状态落库到 `agent_tasks` 表，服务重启后仍可通过 GodView 查询最近任务。模型 HTTP 超时由各 Provider 的客户端超时配置控制；调用失败时由模型网关和 Agent fallback 保证游戏主流程继续运行。
 
 ## GameEvent Replay
 

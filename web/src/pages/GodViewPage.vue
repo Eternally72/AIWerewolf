@@ -28,14 +28,12 @@
 
       <section v-if="activeTab === 'timeline'" class="glass panel note-panel">
         <h2>完整时间线</h2>
-        <VirtualList v-if="memories.length" :items="memories" :item-height="92">
-          <template #default="{ item: memory }">
-            <p class="timeline-item">
-              <strong>[{{ memory.scope }}] {{ phaseName(memory.phase) }}</strong>
-              <span>{{ formatText(memory.content) }}</span>
-            </p>
-          </template>
-        </VirtualList>
+        <div v-if="memories.length" class="scroll-list">
+          <p v-for="memory in memories" :key="memory.id" class="timeline-item">
+            <strong>[{{ memory.scope }}] {{ phaseName(memory.phase) }}</strong>
+            <span>{{ formatText(memory.content) }}</span>
+          </p>
+        </div>
         <p v-else class="empty">暂无时间线</p>
       </section>
 
@@ -84,15 +82,13 @@
             <button class="btn secondary" @click="loadDiagnostics">加载诊断</button>
           </div>
           <div class="diagnostic-list">
-            <VirtualList v-if="tasks.length" :items="tasks" :item-height="88" key-field="taskId">
-              <template #default="{ item: task }">
-                <p class="timeline-item">
-                  <strong>{{ task.status }}</strong>
-                  <span>{{ task.purpose }} / {{ phaseName(task.phase) }} / {{ task.latencyMillis }}ms</span>
-                  <em>{{ playerLabel(view?.players ?? [], task.playerId) }}</em>
-                </p>
-              </template>
-            </VirtualList>
+            <div v-if="tasks.length" class="scroll-list compact-list">
+              <p v-for="task in tasks" :key="task.taskId" class="timeline-item">
+                <strong>{{ task.status }}</strong>
+                <span>{{ task.purpose }} / {{ phaseName(task.phase) }} / {{ task.latencyMillis }}ms</span>
+                <em>{{ playerLabel(view?.players ?? [], task.playerId) }}</em>
+              </p>
+            </div>
             <p v-if="!tasks.length" class="empty">点击加载诊断后显示最近任务</p>
           </div>
         </article>
@@ -102,15 +98,13 @@
             <button class="btn secondary" @click="loadDiagnostics">刷新</button>
           </div>
           <div class="diagnostic-list">
-            <VirtualList v-if="runs.length" :items="runs" :item-height="88">
-              <template #default="{ item: run }">
-                <p class="timeline-item">
-                  <strong>{{ run.status }}</strong>
-                  <span>{{ run.purpose }} / {{ run.modelProvider }} / {{ run.latencyMillis }}ms</span>
-                  <em v-if="run.errorMessage">{{ run.errorMessage }}</em>
-                </p>
-              </template>
-            </VirtualList>
+            <div v-if="runs.length" class="scroll-list compact-list">
+              <p v-for="run in runs" :key="run.id" class="timeline-item">
+                <strong>{{ run.status }}</strong>
+                <span>{{ run.purpose }} / {{ run.modelProvider }} / {{ run.latencyMillis }}ms</span>
+                <em v-if="run.errorMessage">{{ run.errorMessage }}</em>
+              </p>
+            </div>
             <p v-if="!runs.length" class="empty">点击加载诊断后显示最近运行记录</p>
           </div>
         </article>
@@ -123,22 +117,20 @@
           <button class="btn secondary" @click="loadReplay">加载回放</button>
         </div>
         <div class="diagnostic-list">
-            <VirtualList v-if="replay.length" :items="replay" :item-height="92">
-              <template #default="{ item: event }">
-                <p class="timeline-item">
-                  <strong>[{{ event.scope }}] {{ event.eventType }}</strong>
-                  <span>第 {{ event.roundNumber }} 轮 / {{ phaseName(event.phase) }}</span>
-                  <em>{{ formatText(payloadText(event.payloadJson)) }}</em>
-                </p>
-              </template>
-            </VirtualList>
+            <div v-if="replay.length" class="scroll-list">
+              <p v-for="event in replay" :key="event.id" class="timeline-item">
+                <strong>[{{ event.scope }}] {{ event.eventType }}</strong>
+                <span>第 {{ event.roundNumber }} 轮 / {{ phaseName(event.phase) }}</span>
+                <em>{{ formatText(payloadText(event.payloadJson)) }}</em>
+              </p>
+            </div>
             <p v-if="!replay.length" class="empty">点击加载回放后显示事件流</p>
         </div>
       </section>
 
       <section v-else class="glass table note-panel">
         <article v-for="player in view?.players ?? []" :key="player.id" class="row" :class="{ dead: !player.alive }">
-          <img v-if="roleAsset(player.role)" :src="roleAsset(player.role) ?? ''" :alt="roleName(player.role)" />
+          <b class="seat-token">{{ player.seatNumber }}</b>
           <span>{{ player.seatNumber }} 号</span>
           <strong>{{ player.name }}</strong>
           <b>{{ roleName(player.role) }}</b>
@@ -153,8 +145,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getAgentRuns, getAgentTasks, getGodReplay } from '../api/client'
-import { roleAsset } from '../assets'
-import VirtualList from '../components/VirtualList.vue'
 import { campName, phaseName, playerLabel, replacePlayerIds, roleName } from '../game/gameLabels'
 import { useGameStore } from '../stores/game'
 import type { AgentRun, AgentTask, GameEvent } from '../types/game'
@@ -314,7 +304,7 @@ function purposeLabel(purpose: string) {
 function compactInputSnapshot(snapshotJson: string) {
   const snapshot = parseJsonObject(snapshotJson)
   const compact = {
-    viewer: playerRef(snapshot.viewerPlayerId),
+    viewer: snapshot.viewer ?? playerRef(snapshot.viewerPlayerId),
     ownRole: snapshot.ownRole ?? null,
     ownCamp: snapshot.ownCamp ?? null,
     phase: snapshot.phase ?? null,
@@ -324,8 +314,8 @@ function compactInputSnapshot(snapshotJson: string) {
           seatNumber: player.seatNumber,
           name: player.name,
           alive: player.alive,
-          role: player.role,
-          camp: player.camp
+          role: player.visibleRole ?? player.role,
+          camp: player.visibleCamp ?? player.camp
         }))
       : [],
     memories: Array.isArray(snapshot.memories)
@@ -337,8 +327,8 @@ function compactInputSnapshot(snapshotJson: string) {
       : [],
     speeches: Array.isArray(snapshot.speeches)
       ? snapshot.speeches.slice(-8).map((speech: any) => ({
-          player: playerRef(speech.playerId),
-          content: formatText(String(speech.content ?? ''))
+          player: speech.playerRef ?? playerRef(speech.playerId),
+          content: formatText(String(speech.speech ?? speech.content ?? ''))
         }))
       : []
   }
@@ -414,8 +404,14 @@ function percent(value: number, total: number) {
 .note-panel {
   min-height: min(680px, calc(100vh - 250px));
 }
-.note-panel :deep(.virtual-list) {
+.scroll-list {
   max-height: min(680px, calc(100vh - 320px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.compact-list {
+  max-height: min(480px, calc(100vh - 390px));
 }
 .table,
 .panel {
@@ -493,12 +489,14 @@ function percent(value: number, total: number) {
   padding: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.row img {
+.seat-token {
   width: 36px;
   height: 36px;
   border-radius: 999px;
-  object-fit: cover;
-  background: rgba(255, 255, 255, 0.08);
+  display: grid;
+  place-items: center;
+  background: #1f2937;
+  color: #f8fafc;
 }
 .row.dead {
   opacity: 0.45;
@@ -506,6 +504,8 @@ function percent(value: number, total: number) {
 .timeline-item {
   display: grid;
   gap: 6px;
+  content-visibility: auto;
+  contain-intrinsic-size: 88px;
 }
 .timeline-item span,
 .timeline-item em,

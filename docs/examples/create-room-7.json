@@ -36,7 +36,7 @@
     "speechTimeLimitSeconds": 90,
     "voteTimeLimitSeconds": 45,
     "nightActionTimeLimitSeconds": 45,
-    "aiThinkingDelayMillis": 450,
+    "aiThinkingDelayMillis": 1200,
     "autoAdvance": true,
     "revealRoleOnDeath": false
   },

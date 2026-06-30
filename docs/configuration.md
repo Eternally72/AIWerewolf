@@ -4,14 +4,7 @@
 
 见根目录 `.env.example` 和 `web/.env.example`。
 
-前端图片资源格式：
-
-```env
-# png | optimized-webp | optimized-avif
-VITE_ASSET_VARIANT=png
-```
-
-默认使用 PNG，适合本地开发。生产或作品集演示时，可以先执行 `web/scripts/optimize-assets.sh` 生成压缩资源，再切换到 `optimized-webp` 或 `optimized-avif`。
+前端使用纯 CSS 和文本渲染座位、角色、事件流与结算信息，不依赖背景图、头像或角色图片，也不需要配置图片资源格式。
 
 Redis 可选但推荐启用：
 
@@ -71,16 +64,7 @@ OPENAI_COMPATIBLE_MODEL=your-model
 
 不要把真实 API Key 写入 `application.yml` 或提交到 GitHub；只放在本地 `.env`、系统环境变量或部署平台 Secret 中。
 
-Agent Worker 配置：
-
-```env
-AGENT_WORKER_POOL_SIZE=4
-AGENT_WORKER_MAX_POOL_SIZE=8
-AGENT_WORKER_QUEUE_CAPACITY=128
-AGENT_WORKER_AWAIT_TIMEOUT_SECONDS=60
-```
-
-当前 Worker 使用 JVM 内线程池执行 Agent 决策任务，并将任务状态持久化到 MySQL 的 `agent_tasks` 表。同一阶段内的 AI 发言、投票和夜间行动决策会批量提交到线程池并发执行，阶段末再按座位顺序收敛结果。Redis 仍用于短期记忆、运行态缓存、阶段锁和幂等键。后续如果要部署多实例，建议将任务投递层升级为 Redis Stream、RocketMQ 或 Kafka。
+Agent 决策任务会记录到 MySQL 的 `agent_tasks` 表，但模型调用在当前游戏推进线程中严格按座位同步执行。后置 Agent 只有在前序 Agent 的发言或行动完成并持久化后才会启动，从而保证公开上下文顺序和对局稳定性。Redis 仍用于短期记忆、运行态缓存、阶段锁和幂等键。
 
 ## 可以提交
 

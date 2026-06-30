@@ -35,5 +35,9 @@ class AgentDecisionParserTest {
 
         assertThat(parser.parseVote("{\"targetPlayerId\":\"wolf2\",\"reason\":\"test\",\"confidence\":0.8}", "wolf1", view)).isEmpty();
         assertThat(parser.parseVote("{\"targetPlayerId\":\"good\",\"reason\":\"test\",\"confidence\":0.8}", "wolf1", view)).isPresent();
+        assertThat(parser.parseVote("{\"targetPlayerRef\":\"seat-3\",\"reason\":\"test\",\"confidence\":0.8}", "wolf1", view))
+                .get()
+                .extracting(decision -> decision.targetPlayerId())
+                .isEqualTo("good");
     }
 }

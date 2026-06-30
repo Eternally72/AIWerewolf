@@ -3,6 +3,8 @@ package com.example.aiwerewolf.aiinfra.prompt;
 import com.example.aiwerewolf.aiinfra.run.AgentRunPurpose;
 import com.example.aiwerewolf.game.view.GameView;
 import com.example.aiwerewolf.role.model.Role;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
@@ -28,8 +30,10 @@ public class PromptRegistry {
     private final Map<Role, String> rolePrompts = new EnumMap<>(Role.class);
     private final Map<AgentRunPurpose, String> taskPrompts = new EnumMap<>(AgentRunPurpose.class);
     private final Map<AgentRunPurpose, String> outputSchemas = new EnumMap<>(AgentRunPurpose.class);
+    private final ObjectMapper objectMapper;
 
-    public PromptRegistry() {
+    public PromptRegistry(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
         this.commonRolePrompt = load(ROLE_ROOT + "common.md");
         this.unknownRolePrompt = commonRolePrompt + "\n\n" + load(ROLE_ROOT + "unknown.md");
         for (Role role : Role.values()) {
@@ -52,13 +56,14 @@ public class PromptRegistry {
                                          AgentRunPurpose purpose) {
         String taskPrompt = taskPrompt(purpose);
         String outputSchema = outputSchema(purpose);
+        AgentPromptContext promptContext = AgentPromptContext.from(privateGameView);
         String userPrompt = """
-                agentId=%s
+                agentRef=%s
 
                 短期记忆：
                 %s
 
-                当前过滤后的私有视角：
+                当前过滤后的私有视角 JSON：
                 %s
 
                 任务说明：
@@ -66,10 +71,12 @@ public class PromptRegistry {
 
                 输出 JSON Schema：
                 %s
-                """.formatted(agentId, blankToPlaceholder(shortTermMemory), privateGameView, taskPrompt, outputSchema);
+                """.formatted(promptContext.viewer(), sanitizeMemory(shortTermMemory, privateGameView),
+                toJson(promptContext), taskPrompt, outputSchema);
         return new PromptBundle(
                 systemPrompt(privateGameView.ownRole()),
                 userPrompt,
+                promptContext,
                 rolePromptVersion(privateGameView.ownRole()),
                 taskPromptVersion(purpose),
                 outputSchemaVersion(purpose));
@@ -135,5 +142,21 @@ public class PromptRegistry {
             return "暂无";
         }
         return value;
+    }
+
+    private String sanitizeMemory(@Nullable String memory, GameView view) {
+        String sanitized = blankToPlaceholder(memory);
+        for (var player : view.players()) {
+            sanitized = sanitized.replace(player.id(), player.seatNumber() + "号 " + player.name());
+        }
+        return sanitized;
+    }
+
+    private String toJson(AgentPromptContext context) {
+        try {
+            return objectMapper.writeValueAsString(context);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize agent prompt context", ex);
+        }
     }
 }

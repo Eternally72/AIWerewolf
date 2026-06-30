@@ -13,10 +13,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 72% 12%, rgba(219, 231, 255, 0.24), transparent 9rem),
-    radial-gradient(circle at 20% 20%, rgba(101, 55, 151, 0.28), transparent 22rem),
-    linear-gradient(135deg, #060914 0%, #10172a 48%, #1b1025 100%);
+  background: #080b14;
 }
 
 a {
@@ -57,13 +54,7 @@ textarea:focus {
 
 .glass {
   border: 1px solid rgba(220, 230, 255, 0.16);
-  background: rgba(10, 14, 28, 0.76);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
-}
-
-.game-page .glass {
-  backdrop-filter: none;
+  background: #0d1220;
 }
 
 .btn {
@@ -76,7 +67,7 @@ textarea:focus {
   border: 1px solid rgba(232, 238, 255, 0.18);
   border-radius: 8px;
   color: #f8fbff;
-  background: linear-gradient(135deg, #7f1d1d, #312e81);
+  background: #4338ca;
   cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease;
 }
@@ -87,7 +78,7 @@ textarea:focus {
 }
 
 .btn.secondary {
-  background: rgba(255, 255, 255, 0.08);
+  background: #1b2232;
 }
 
 .grid {
@@ -133,15 +124,9 @@ textarea:focus {
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, #cbd5e1, #4338ca 46%, #7f1d1d);
+  background: #3730a3;
   font-weight: 800;
   overflow: hidden;
-}
-
-.avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .timeline {

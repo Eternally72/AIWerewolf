@@ -41,7 +41,7 @@ public class AgentDecisionParser {
         if (json == null) {
             return Optional.empty();
         }
-        String targetId = text(json, "targetPlayerId");
+        String targetId = resolvePlayerId(view, firstText(json, "targetPlayerRef", "targetPlayerId"));
         if (!validVoteTarget(agentId, view, targetId)) {
             return Optional.empty();
         }
@@ -60,8 +60,9 @@ public class AgentDecisionParser {
         if (actionType == null) {
             return Optional.empty();
         }
-        String targetId = blankToNull(text(json, "targetPlayerId"));
-        String secondaryTargetId = blankToNull(text(json, "secondaryTargetPlayerId"));
+        String targetId = resolvePlayerId(view, firstText(json, "targetPlayerRef", "targetPlayerId"));
+        String secondaryTargetId = resolvePlayerId(view,
+                firstText(json, "secondaryTargetPlayerRef", "secondaryTargetPlayerId"));
         if (requiresTarget(actionType) && !validActionTarget(agentId, view, targetId)) {
             return Optional.empty();
         }
@@ -107,6 +108,28 @@ public class AgentDecisionParser {
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value != null && !value.isNull() ? value.asText() : null;
+    }
+
+    @Nullable
+    private String firstText(JsonNode node, String primaryField, String compatibilityField) {
+        String value = text(node, primaryField);
+        return value == null || value.isBlank() ? text(node, compatibilityField) : value;
+    }
+
+    @Nullable
+    private String resolvePlayerId(GameView view, @Nullable String playerRef) {
+        if (playerRef == null || playerRef.isBlank()) {
+            return null;
+        }
+        String normalized = playerRef.strip().toLowerCase();
+        return view.players().stream()
+                .filter(player -> player.id().equals(playerRef.strip())
+                        || normalized.equals("seat-" + player.seatNumber())
+                        || normalized.equals(String.valueOf(player.seatNumber()))
+                        || normalized.equals(player.seatNumber() + "号"))
+                .map(player -> player.id())
+                .findFirst()
+                .orElse(null);
     }
 
     private double confidence(JsonNode node) {

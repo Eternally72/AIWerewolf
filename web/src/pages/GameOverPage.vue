@@ -1,5 +1,5 @@
 <template>
-  <main class="page over-page" :style="{ '--victory-bg': `url(${backgroundAssets.victory})` }">
+  <main class="page over-page">
     <section class="shell over-layout">
       <header class="over-hero">
         <RouterLink :to="`/rooms/${roomId}/game`">返回游戏桌</RouterLink>
@@ -15,7 +15,7 @@
         <h2>身份揭示</h2>
         <div class="players">
           <article v-for="player in view?.players ?? []" :key="player.id" class="player" :class="campClass(player.camp, '')">
-            <img v-if="roleAsset(player.role)" :src="roleAsset(player.role) ?? ''" :alt="roleName(player.role)" />
+            <b class="seat-number">{{ player.seatNumber }}</b>
             <strong>{{ player.seatNumber }} 号 {{ player.name }}</strong>
             <span>{{ roleName(player.role) }} · {{ campName(player.camp) }}</span>
             <em>{{ player.alive ? '存活' : '死亡' }}</em>
@@ -40,7 +40,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getPublicView } from '../api/client'
-import { backgroundAssets, roleAsset } from '../assets'
 import { campClass, campName, phaseName, replacePlayerIds, roleName } from '../game/gameLabels'
 import type { GameView } from '../types/game'
 
@@ -48,7 +47,7 @@ const route = useRoute()
 const roomId = computed(() => String(route.params.roomId))
 const view = ref<GameView | null>(null)
 const keyMemories = computed(() => (view.value?.memories ?? []).filter(memory =>
-  ['GAME_OVER', 'EXECUTION', 'VOTE', 'PHASE_CHANGED', 'NIGHT_RESOLUTION'].includes(memory.eventType)
+  ['GAME_OVER', 'VOTE_RESULT', 'PLAYER_DEAD', 'PHASE_CHANGED', 'PUBLIC_SPEECH_SUMMARY'].includes(memory.eventType)
 ).slice(-30))
 const victorySummary = computed(() => {
   const gameOverMemory = [...(view.value?.memories ?? [])].reverse().find(memory => memory.eventType === 'GAME_OVER')
@@ -66,12 +65,7 @@ onMounted(async () => {
 
 <style scoped>
 .over-page {
-  background:
-    linear-gradient(rgba(5, 8, 18, 0.54), rgba(5, 8, 18, 0.86)),
-    var(--victory-bg),
-    linear-gradient(135deg, #060914, #211129);
-  background-size: cover;
-  background-position: center;
+  background: #080b14;
 }
 .over-layout {
   display: grid;
@@ -113,12 +107,15 @@ onMounted(async () => {
   border: 1px solid rgba(232, 238, 255, 0.14);
   background: rgba(6, 9, 18, 0.62);
 }
-.player img {
+.seat-number {
   width: 64px;
   height: 64px;
   border-radius: 999px;
-  object-fit: cover;
-  background: rgba(255, 255, 255, 0.08);
+  display: grid;
+  place-items: center;
+  background: #1f2937;
+  color: #f8fafc;
+  font-size: 24px;
 }
 .player span,
 .player em {

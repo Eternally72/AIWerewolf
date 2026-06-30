@@ -103,11 +103,8 @@ public class GamePhaseEngine {
         if (room.getStatus() == RoomStatus.PAUSED) {
             throw new BusinessException("ILLEGAL_PHASE_OPERATION", "游戏已暂停");
         }
-        String processKey = "idempotency:%s:%s:%s:process".formatted(safeRoomId, room.getCurrentRound(), room.getPhase());
-        if (idempotencyService.markIfAbsent(processKey, Duration.ofHours(12))) {
-            processCurrentPhase(room);
-        }
-        if (room.getPhase() != GamePhase.GAME_OVER) {
+        boolean phaseCompleted = processCurrentPhase(room);
+        if (room.getPhase() != GamePhase.GAME_OVER && phaseCompleted) {
             room.setPhase(nextRunnablePhase(room));
             if (room.getPhase() == GamePhase.NIGHT) {
                 room.setCurrentRound(room.getCurrentRound() + 1);
@@ -135,7 +132,7 @@ public class GamePhaseEngine {
         String safeRoomId = Objects.requireNonNull(roomId, "roomId must not be null");
         RoomEntity room = room(safeRoomId);
         int guard = 0;
-        while (guard++ < 200 && room.getStatus() == RoomStatus.RUNNING && room.getPhase() != GamePhase.GAME_OVER) {
+        while (guard++ < 1000 && room.getStatus() == RoomStatus.RUNNING && room.getPhase() != GamePhase.GAME_OVER) {
             room = advancePhase(safeRoomId);
         }
         if (room.getPhase() != GamePhase.GAME_OVER) {
@@ -144,17 +141,27 @@ public class GamePhaseEngine {
         return room;
     }
 
-    public void processCurrentPhase(RoomEntity room) {
+    public boolean processCurrentPhase(RoomEntity room) {
         int round = room.getCurrentRound();
-        switch (room.getPhase()) {
+        return switch (room.getPhase()) {
             case GUARD_ACTION, WEREWOLF_ACTION, SEER_ACTION, WITCH_ACTION, OTHER_NIGHT_ACTION ->
-                    nightActionService.generateAiNightActions(room.getId(), round, room.getPhase());
+                    nightActionService.processNextAiNightAction(room.getId(), round, room.getPhase());
+            case DAY_SPEECH -> speechService.processNextAiSpeech(room.getId(), round);
+            case DAY_VOTE -> voteService.processNextAiVote(room.getId(), round);
+            default -> processAtomicPhase(room, round);
+        };
+    }
+
+    private boolean processAtomicPhase(RoomEntity room, int round) {
+        String processKey = "idempotency:%s:%s:%s:process".formatted(room.getId(), round, room.getPhase());
+        if (!idempotencyService.markIfAbsent(processKey, Duration.ofHours(12))) {
+            return true;
+        }
+        switch (room.getPhase()) {
             case NIGHT_RESOLUTION -> {
                 nightActionService.resolveNightActions(room.getId(), round);
                 checkVictory(room);
             }
-            case DAY_SPEECH -> speechService.generateAiSpeech(room.getId(), round);
-            case DAY_VOTE -> voteService.generateAiVotes(room.getId(), round);
             case EXECUTION -> {
                 Optional<String> targetId = voteService.calculateVoteResult(room.getId(), round);
                 targetId.flatMap(this::findPlayer).ifPresent(player -> deathResolutionService.exilePlayer(player, room.getId(), round));
@@ -163,6 +170,7 @@ public class GamePhaseEngine {
             default -> {
             }
         }
+        return true;
     }
 
     public boolean validatePhaseTransition(GamePhase current, GamePhase next) {
@@ -181,35 +189,31 @@ public class GamePhaseEngine {
     }
 
     private boolean humanInputRequired(RoomEntity room) {
-        return playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(room.getId()).stream()
-                .filter(player -> player.getType() == PlayerType.HUMAN)
-                .anyMatch(player -> humanCanActInPhase(player, room));
-    }
-
-    private boolean humanCanActInPhase(PlayerEntity player, RoomEntity room) {
         GamePhase phase = room.getPhase();
         int round = room.getCurrentRound();
         if (phase == GamePhase.DAY_SPEECH) {
-            return player.isCanSpeak()
-                    && speechRepository.findByRoomIdAndRoundNumberAndPlayerId(room.getId(), round, player.getId()).isEmpty();
+            return firstPendingPlayer(room, player -> player.isCanSpeak()
+                    && speechRepository.findByRoomIdAndRoundNumberAndPlayerId(room.getId(), round, player.getId()).isEmpty());
         }
         if (phase == GamePhase.DAY_VOTE) {
-            return player.isCanVote()
-                    && voteRepository.findByRoomIdAndRoundNumberAndVoterPlayerId(room.getId(), round, player.getId()).isEmpty();
+            return firstPendingPlayer(room, player -> player.isCanVote()
+                    && voteRepository.findByRoomIdAndRoundNumberAndVoterPlayerId(room.getId(), round, player.getId()).isEmpty());
         }
-        Role role = player.getRole();
-        if (role == null) {
-            return false;
-        }
-        boolean canAct = switch (phase) {
-            case WEREWOLF_ACTION -> role.isWerewolfCamp();
-            case SEER_ACTION -> role == Role.SEER;
-            case WITCH_ACTION -> role == Role.WITCH;
-            case GUARD_ACTION -> role == Role.GUARD;
+        return switch (phase) {
+            case WEREWOLF_ACTION, SEER_ACTION, WITCH_ACTION, GUARD_ACTION, OTHER_NIGHT_ACTION ->
+                    firstPendingPlayer(room, player -> roleCanActInPhase(player.getRole(), phase)
+                            && !gameActionRepository.existsByRoomIdAndRoundNumberAndPhaseAndActorPlayerId(
+                            room.getId(), round, phase, player.getId()));
             default -> false;
         };
-        return canAct && !gameActionRepository.existsByRoomIdAndRoundNumberAndPhaseAndActorPlayerId(
-                room.getId(), round, phase, player.getId());
+    }
+
+    private boolean firstPendingPlayer(RoomEntity room, java.util.function.Predicate<PlayerEntity> pending) {
+        return playerRepository.findByRoomIdAndAliveTrueOrderBySeatNumberAsc(room.getId()).stream()
+                .filter(pending)
+                .findFirst()
+                .map(player -> player.getType() == PlayerType.HUMAN)
+                .orElse(false);
     }
 
     private GamePhase nextPhase(GamePhase phase) {
@@ -261,7 +265,7 @@ public class GamePhaseEngine {
         }
         return switch (phase) {
             case GUARD_ACTION -> role == Role.GUARD;
-            case WEREWOLF_ACTION -> role.isWerewolfCamp();
+            case WEREWOLF_ACTION -> role.isWerewolfCamp() && role != Role.HIDDEN_WOLF;
             case SEER_ACTION -> role == Role.SEER;
             case WITCH_ACTION -> role == Role.WITCH;
             case OTHER_NIGHT_ACTION -> role == Role.MAGICIAN || role == Role.CUPID;

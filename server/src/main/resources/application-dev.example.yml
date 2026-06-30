@@ -35,12 +35,6 @@ llm:
     model: glm-4-flash
     timeout-seconds: 30
 
-ai-infra:
-  agent-worker:
-    pool-size: 4
-    max-pool-size: 8
-    queue-capacity: 128
-    await-timeout-seconds: 60
 
 logging:
   level:
